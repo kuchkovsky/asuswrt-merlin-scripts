@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# services-start — Merlin boot-completion hook (runs once each boot)
+# ---------------------------------------------------------------------------
+# 1. User-defined logic (cron jobs, UI tweaks, optional startup mail)
+# 2. Third-party plugins
+# ---------------------------------------------------------------------------
+
+#############################################################################
+# 1. User-defined logic
+#############################################################################
+
+# -------- Patch Traffic Monitor JS to show Kb/s / Mb/s in the table --------
+/jffs/scripts/mount_tmcal.sh   # merges /www/tmcal.js with /jffs/tmcal.js.add
+
+# -------------------------------- Cron jobs --------------------------------
+#  trim_ssd        – run every Sunday 03:00, sends fstrim to the USB SSD
+#  upgrade_nextdns – run every Sunday 04:00, upgrades NextDNS binary
+cru a trim_ssd        "0 3 * * 0 /jffs/scripts/trim_ssd.sh"
+cru a upgrade_nextdns "0 4 * * 0 /jffs/nextdns/nextdns upgrade"
+
+# -------------------------- Startup notification ---------------------------
+# Sends a "router booted" email 60 seconds after network comes up.
+# Handy for spotting power outages: if you receive the message without having
+# rebooted the router yourself, it means power must have dropped.
+(sleep 60; /jffs/scripts/send_email.sh "🟢 Startup Notification" \
+    "I've just started up and got connected to the internet.") &
+
+#############################################################################
+# 2. Third-party plugins
+#############################################################################
+
+# NextDNS init script (leave or remove depending on your setup)
+/jffs/nextdns/nextdns.init start

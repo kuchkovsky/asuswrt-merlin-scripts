@@ -1,0 +1,8 @@
+#!/bin/sh
+#
+# nat-start — Merlin hot-plug hook executed whenever the NAT table
+#             is (re)initialised: reboot, WAN failover, etc.
+#
+
+# Run WireGuard client port forwarding rules at NAT table (re)start
+/jffs/scripts/wgc_port_forwarding.sh

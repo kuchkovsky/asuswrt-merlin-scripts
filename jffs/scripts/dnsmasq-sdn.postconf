@@ -1,0 +1,26 @@
+#!/bin/sh
+# dnsmasq-sdn.postconf — NextDNS integration for ASUS SDN (Self-Defined Network)
+# -------------------------------------------------------------------------------
+# Based on the official NextDNS postconf for the main LAN (br0), this variant
+# also applies the same settings to every custom SDN interface you define,
+# ensuring those networks use the local NextDNS listener just like the primary
+# LAN. All logic below this header is unchanged from the upstream script.
+# -------------------------------------------------------------------------------
+
+CONFIG="$1"
+. /usr/sbin/helper.sh
+
+if [ -f /tmp/nextdns.pid ] && [ -d "/proc/$(sed -n '1p' /tmp/nextdns.pid)" ]; then
+    pc_append "no-resolv" "$CONFIG"
+    pc_delete "servers-file" "$CONFIG"           # disconnect dnsmasq from WAN DNS settings
+    pc_delete "resolv-file" "$CONFIG"            # disconnect dnsmasq from WAN DNS settings
+    pc_append "server=127.0.0.1#5342" "$CONFIG"  # point dnsmasq to NextDNS listener IP:port
+    pc_delete "stop-dns-rebind" "$CONFIG"        # disable DNS rebind if enabled
+    pc_delete "trust-anchor=" "$CONFIG"          # disable DNSSEC
+    pc_delete "dnssec" "$CONFIG"                 # disable DNSSEC
+    pc_delete "cache-size" "$CONFIG"
+    pc_append "cache-size=0" "$CONFIG"           # let nextdns handle caching
+    pc_append "add-mac" "$CONFIG"
+    pc_append "add-subnet=32,128" "$CONFIG"
+    exit 0
+fi

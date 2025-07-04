@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# pre-mount — Merlin hot-plug hook fired just before a block device is mounted.
+#
+
+SSD_VOLUME_LABEL='st5'   # <-- edit: change to your SSD's volume label
+
+# If the device being mounted has the specified label, set its provisioning
+# mode to "unmap" so the drive can be trimmed.
+if tune2fs -l "$1" 2>/dev/null | grep -q "Filesystem volume name: *$SSD_VOLUME_LABEL$"; then
+    /jffs/scripts/ssd_provisioning_mode.sh    # supply your vendor ID here if it isn't Samsung
+fi
