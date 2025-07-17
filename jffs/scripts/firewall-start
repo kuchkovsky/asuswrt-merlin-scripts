@@ -11,3 +11,6 @@
 if [ -f /tmp/backup_wan.enabled ]; then
     . /jffs/scripts/util.sh && block_wan_for_host hostname    # <-- edit: replace with the host to block
 fi
+
+# Drop spoofed bogon ranges coming from WAN
+/jffs/scripts/pf_filter.sh

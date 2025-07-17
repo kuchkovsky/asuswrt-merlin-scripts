@@ -62,28 +62,31 @@ git clone https://github.com/kuchkovsky/asuswrt-merlin-scripts.git
   * Optionally blocks a noisy LAN host from using the expensive secondary link, like LTE; see `util.sh`.
 * **`firewall-start`** – reapplies the block if the firewall restarts while secondary WAN is active.
 
-## 3.  Shared utility library (`util.sh`)
+## 3. Early drop of bogon traffic to exposed ports
 
-A helper toolkit sourced by other scripts.
+> **Prerequisites:**
+> 1. Intended for use only if port forwarding is enabled – it has no effect otherwise.
+> 2. WAN interface must receive a **public IP directly** (no double NAT).
 
-* **Purpose** – factor-out common tasks: resolving hostnames, testing if an address is private,
-  creating iptables rules without duplicates and avoiding attempts to delete non-existent rules,
-  blocking LAN hosts accessing from accessing WAN, so each script stays short and readable.
+* **`pf_filter.sh`** (port forward filter) – blocks spoofed or illegitimate packets targeting public services before
+they hit DNAT, conntrack, or routing logic, saving CPU cycles and reducing attack surface. This script parses your
+current `VSERVER` DNAT rules, extracts all destination ports exposed to the WAN, and sets up early-drop filtering
+for packets from bogon (reserved/special-use) IPv4 ranges.
 
-* **Public API**
+* **What it does:**
+  * Scans `VSERVER` iptables rules to extract forwarded TCP/UDP ports.
+  * Compresses consecutive ports into compact `multiport` expressions.
+  * Creates an ipset (`bogon4`) with well-known bogus IPv4 prefixes (RFC 5735, 1918, 3927, 6598, etc.).
+  * Creates a dedicated `raw` table chain (`VSERVER_FILTERING`) with a single `DROP` rule for packets from those IPs.
+  * Installs jump rules from `raw PREROUTING` only for the exposed ports, minimizing performance impact.
 
-  | Function                                            | What it does                                                                                                                                                                                                                                                                                                                                                                   | Typical use-case                                                                                                                                              |
-  |-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | `is_lan_ip <ipv4>`                                  | Returns `0` when the address is in an RFC-1918 subnet (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), `1` otherwise.                                                                                                                                                                                                                                                        | Quick test before you decide to apply LAN-only logic.                                                                                                         |
-  | `resolve_ip <host-or-ip>`                           | Returns a single IPv4 (LAN or WAN). Accepts literal IPs, `/etc/hosts` aliases, or DNS names. Exits non-zero if nothing resolves.                                                                                                                                                                                                                                               | Turn a hostname into an address when you don't care whether it's private.                                                                                     |
-  | `resolve_lan_ip <host-or-ip>`                       | Same as `resolve_ip`, but refuses to return a public IP.  Errors out if the result is not RFC-1918.                                                                                                                                                                                                                                                                            | Safely translate a hostname when the rest of your code must see a LAN address.                                                                                |
-  | `ensure_fw_rule <table> <chain> [-I\|-D] <rule...>` | Idempotent firewall helper (a helper that creates `iptables` rules without duplicates and avoids attempts to delete non-existent rules): <br>  • no flag   → append rule (`-A`) if missing<br>  • `-I`      → insert rule (`-I`) at top if missing<br>  • `-D`      → delete rule (`-D`) if present<br>Guarantees the rule appears **exactly once** (or not at all, for `-D`). | All scripts use this instead of hand-rolling `iptables -C/-A/-I/-D` checks.                                                                                   |
-  | `block_wan_for_host <hostname\|ip>`                 | Resolves the target to a LAN IP and inserts a `REJECT` rule into `FORWARD`, preventing that device from reaching the WAN.                                                                                                                                                                                                                                                      | • Keep a chatty device off an expensive LTE backup link. <br> •  Enforce parental controls, cutting internet access for your child's device via user scripts. |
-  | `allow_wan_for_host <hostname\|ip>`                 | Resolves the target and removes the matching `REJECT` rule, restoring WAN access.                                                                                                                                                                                                                                                                                              | • Restore the device's internet access when the primary WAN is back online. <br> • Lift parental controls, re-enabling internet for your child's device.      |
-
-These helpers are **IPv4-only**; mirror the logic with `ip6tables` if you need IPv6 support.
-
-
+* **Why it matters:**
+  * Drops spoofed packets before conntrack sees them – avoids polluting the connection table.
+  * Reduces attack surface from spoofed traffic targeting forwarded services like VPN, SSH, HTTP, etc.
+  * Auto-adapts to port changes via ASUS GUI (runs on `firewall-start`, so it reapplies rules after firewall reloads).
+  
+This script is **IPv4-only**; mirror the logic with `ip6tables` and `ipset6` if you need IPv6 support.
+  
 ## 4. Automatic USB SSD trimming & provisioning mode fix
 
 * **Why?** ASUS routers don't enable SSD trimming by default, and most USB SSDs ship with provisioning mode **`full`** or **`partial`**. 
@@ -147,8 +150,28 @@ Open `/jffs/scripts/pre-mount` and set:
 SSD_VOLUME_LABEL='st5'   # use the exact label you assigned with tune2fs
 ```
 
+## 5.  Shared utility library (`util.sh`)
 
-## 5. nextdns-cli integration for SDNs & automatic updates
+A helper toolkit sourced by other scripts.
+
+* **Purpose** – factor-out common tasks: resolving hostnames, testing if an address is private,
+  creating iptables rules without duplicates and avoiding attempts to delete non-existent rules,
+  blocking LAN hosts accessing from accessing WAN, so each script stays short and readable.
+
+* **Public API**
+
+  | Function                                            | What it does                                                                                                                                                                                                                                                                                                                                                                   | Typical use-case                                                                                                                                              |
+  |-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | `is_lan_ip <ipv4>`                                  | Returns `0` when the address is in an RFC-1918 subnet (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), `1` otherwise.                                                                                                                                                                                                                                                        | Quick test before you decide to apply LAN-only logic.                                                                                                         |
+  | `resolve_ip <host-or-ip>`                           | Returns a single IPv4 (LAN or WAN). Accepts literal IPs, `/etc/hosts` aliases, or DNS names. Exits non-zero if nothing resolves.                                                                                                                                                                                                                                               | Turn a hostname into an address when you don't care whether it's private.                                                                                     |
+  | `resolve_lan_ip <host-or-ip>`                       | Same as `resolve_ip`, but refuses to return a public IP.  Errors out if the result is not RFC-1918.                                                                                                                                                                                                                                                                            | Safely translate a hostname when the rest of your code must see a LAN address.                                                                                |
+  | `ensure_fw_rule <table> <chain> [-I\|-D] <rule...>` | Idempotent firewall helper (a helper that creates `iptables` rules without duplicates and avoids attempts to delete non-existent rules): <br>  • no flag   → append rule (`-A`) if missing<br>  • `-I`      → insert rule (`-I`) at top if missing<br>  • `-D`      → delete rule (`-D`) if present<br>Guarantees the rule appears **exactly once** (or not at all, for `-D`). | All scripts use this instead of hand-rolling `iptables -C/-A/-I/-D` checks.                                                                                   |
+  | `block_wan_for_host <hostname\|ip>`                 | Resolves the target to a LAN IP and inserts a `REJECT` rule into `FORWARD`, preventing that device from reaching the WAN.                                                                                                                                                                                                                                                      | • Keep a chatty device off an expensive LTE backup link. <br> •  Enforce parental controls, cutting internet access for your child's device via user scripts. |
+  | `allow_wan_for_host <hostname\|ip>`                 | Resolves the target and removes the matching `REJECT` rule, restoring WAN access.                                                                                                                                                                                                                                                                                              | • Restore the device's internet access when the primary WAN is back online. <br> • Lift parental controls, re-enabling internet for your child's device.      |
+
+These helpers are **IPv4-only**; mirror the logic with `ip6tables` if you need IPv6 support.
+
+## 6. nextdns-cli integration for SDNs & automatic updates
 > **Prerequisites:**  
 > 1. SDN integration is supported only on SDN-capable router models running Asuswrt-Merlin
 > 3006.\* or later. Routers without SDN ignore the dnsmasq-sdn.postconf file.  
@@ -160,7 +183,7 @@ SSD_VOLUME_LABEL='st5'   # use the exact label you assigned with tune2fs
 * **Auto update job** – **`services-start`** adds a weekly cron entry to update the **nextdns-cli** binary.
 
 
-## 6. Traffic Monitor table (Kb/s & Mb/s) patch
+## 7. Traffic Monitor table (Kb/s & Mb/s) patch
 
 * **`tmcal.js.add`** – overrides a function in ASUS `tmcal.js` so the **Traffic Monitor table shows throughput in Kbps / Mbps** instead of bytes.
 * **`mount_tmcal.sh`** – concatenates the stock JS file with the patch and bind‑mounts the result over `/www/tmcal.js` at boot (using **`services‑start`**).
@@ -172,7 +195,7 @@ to Kb/s & Mb/s:
 ![Traffic-Monitor table now shows Mb/s](docs/img/tm_table_patched.png)
 
 
-## 7. Router startup notification
+## 8. Router startup notification
 
 * **Startup Notification** (integrated into **`services-start`**) – **sends an email 60 seconds after the router comes
   online**. Acts as an indirect power outage alert: if you receive the message
