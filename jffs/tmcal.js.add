@@ -1,8 +1,8 @@
 /*
  * xpsb(byt)  – format "bytes per second" as bits/s with the unit chosen
  *              by getTrafficUnit():
- *                 0 / 9 → Kb/s, 1 → Mb/s, 2 → Gb/s, 3 → Tb/s
- *              Returns a string like "1,234.56 <small>Mb/s</small>""
+ *                 0 / 9 -> Kb/s, 1 -> Mb/s, 2 -> Gb/s, 3 -> Tb/s
+ *              Returns a string like "1,234.56 <small>Mb/s</small>"
  *
  * NOTE: getTrafficUnit() and comma() are provided by the firmware.
  */
@@ -17,7 +17,7 @@ function xpsb(byt) {
     var divisor = divisors.hasOwnProperty(unit) ? divisors[unit] : divisors['0'];
     var scale   = labels.hasOwnProperty(unit)   ? labels[unit]   : labels['0'];
 
-    // bytes → bits → scaled value, then round *after* the math
+    // bytes -> bits -> scaled value, then round after the math
     var value = (byt * 8 / divisor).toFixed(2);
 
     return comma(value) + ' <small>' + scale + '</small>';

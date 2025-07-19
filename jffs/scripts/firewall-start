@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# firewall-start — Merlin hot-plug hook executed every time the firewall
+# firewall-start — Merlin hotplug script executed every time the firewall
 #                  stack reloads.
 #
 

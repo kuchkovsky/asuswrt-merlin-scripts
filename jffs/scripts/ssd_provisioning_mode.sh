@@ -3,19 +3,19 @@
 # ssd_provisioning_mode.sh — flip USB SSD(s) to "unmap"
 # -------------------------------------------------------------------------------
 # Background
-#   Most USB-attached SSDs expose /sys/.../provisioning_mode as **full** or
-#   **partial** by default. In those modes the Linux `fstrim` command cannot
+#   Most USB-attached SSDs expose /sys/.../provisioning_mode as full or
+#   partial by default. In those modes the Linux fstrim command cannot
 #   pass TRIM/UNMAP down to the drive, so the filesystem never informs the
-#   SSD about freed blocks. Setting the file to **unmap** enables proper
-#   TRIM support, letting routine `fstrim` jobs keep the drive's write speed
+#   SSD about freed blocks. Setting the file to unmap enables proper
+#   TRIM support, letting routine fstrim jobs keep the drive's write speed
 #   consistent and minimise wear.
 #
 # What this script does:
-#   • Scans /sys/devices/ for every USB device whose `idVendor` equals
+#   * Scans /sys/devices/ for every USB device whose idVendor equals
 #     SSD_VENDOR_ID (default 04e8 = Samsung; override with CLI arg).
-#   • For each match, writes the string "unmap" into its provisioning_mode
+#   * For each match, writes the string "unmap" into its provisioning_mode
 #     file (if writable).
-#   • Logs successes and failures to syslog with tag `ssd_provisioning_mode`.
+#   * Logs successes and failures to syslog with tag 'ssd_provisioning_mode'.
 #
 # Usage examples:
 #     ssd_provisioning_mode.sh           # targets Samsung USB SSDs
@@ -67,7 +67,7 @@ PROV_MODE_FILES=$(find $DEVICE_DIRS -name provisioning_mode 2>/dev/null)
 FAIL=0
 for f in $PROV_MODE_FILES; do
     if echo unmap > "$f" 2>/dev/null; then
-        log "Set unmap ⇒ $f"
+        log "Set unmap -> $f"
     else
         log "ERROR: could not write $f"
         FAIL=1

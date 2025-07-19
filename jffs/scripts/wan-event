@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# wan-event — Merlin hot-plug hook invoked on WAN interface up/down events.
+# wan-event — Merlin hotplug script invoked on WAN interface up/down events.
 #
 
 # Hand off WAN events processing to the main handler
