@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# pre-mount — Merlin hot-plug hook fired just before a block device is mounted.
+# pre-mount — Merlin hotplug script fired just before a block device is mounted.
 #
 
 SSD_VOLUME_LABEL='st5'   # <-- edit: change to your SSD's volume label

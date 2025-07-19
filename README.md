@@ -68,7 +68,7 @@ git clone https://github.com/kuchkovsky/asuswrt-merlin-scripts.git
 > 1. Intended for use only if port forwarding is enabled – it has no effect otherwise.
 > 2. WAN interface must receive a **public IP directly** (no double NAT).
 
-* **`pf_filter.sh`** (port forward filter) – blocks spoofed or illegitimate packets targeting public services before
+* **`pf_filter.sh`** (port forward filter) – **blocks spoofed or illegitimate packets targeting public services** before
 they hit DNAT, conntrack, or routing logic, saving CPU cycles and reducing attack surface. This script parses your
 current `VSERVER` DNAT rules, extracts all destination ports exposed to the WAN, and sets up early-drop filtering
 for packets from bogon (reserved/special-use) IPv4 ranges.
@@ -83,7 +83,7 @@ for packets from bogon (reserved/special-use) IPv4 ranges.
 * **Why it matters:**
   * Drops spoofed packets before conntrack sees them – avoids polluting the connection table.
   * Reduces attack surface from spoofed traffic targeting forwarded services like VPN, SSH, HTTP, etc.
-  * Auto-adapts to port changes via ASUS GUI (runs on `firewall-start`, so it reapplies rules after firewall reloads).
+  * Auto-adapts to port changes via ASUS GUI (runs on **`firewall-start`**, so it reapplies rules after firewall reloads).
   
 This script is **IPv4-only**; mirror the logic with `ip6tables` and `ipset6` if you need IPv6 support.
   
@@ -96,12 +96,12 @@ This script is **IPv4-only**; mirror the logic with `ip6tables` and `ipset6` if 
   **This integration enables full support for USB SSD trimming on ASUS routers**.
 
 * **`ssd_provisioning_mode.sh`** – scans `/sys/devices/` for USB devices whose
-  `idVendor` equals `SSD_VENDOR_ID` (default `04e8` = Samsung) and writes
+  `idVendor` equals `SSD_VENDOR_ID` (default: `04e8` for Samsung) and writes
   `unmap` into every `provisioning_mode` file it finds.
-* **`pre-mount`** – Merlin hot-plug hook that runs the provisioning mode fix
-  automatically whenever a drive with the specified label is plugged in.
-
-* **`trim_ssd.sh`** – the core logic for the weekly cron job that executes `fstrim -v /mnt/$SSD_LABEL` and logs the result.
+* **`pre-mount`** – Merlin hotplug script that automatically applies the provisioning mode fix
+  when a drive with the specified label is connected.
+* **`trim_ssd.sh`** – core script that runs `fstrim -v /mnt/$SSD_LABEL` and logs the result.
+* **`services-start`** – Merlin hotplug script that sets up a weekly cron job to run `trim_ssd.sh`.
 
 ### Required steps – run on the router once
   **1) Identify your vendor ID and partition path**

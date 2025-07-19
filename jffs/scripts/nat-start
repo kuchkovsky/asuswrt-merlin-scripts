@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# nat-start — Merlin hot-plug hook executed whenever the NAT table
+# nat-start — Merlin hotplug script executed whenever the NAT table
 #             is (re)initialised: reboot, WAN failover, etc.
 #
 

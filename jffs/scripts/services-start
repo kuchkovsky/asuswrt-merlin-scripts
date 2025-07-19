@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# services-start — Merlin boot-completion hook (runs once each boot)
+# services-start — Merlin boot-completion script (runs once each boot)
 # ---------------------------------------------------------------------------
 # 1. User-defined logic (cron jobs, UI tweaks, optional startup mail)
 # 2. Third-party plugins

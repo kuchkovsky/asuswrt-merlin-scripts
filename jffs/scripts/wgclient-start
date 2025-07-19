@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# wgclient-start — Merlin hot-plug hook run when a WireGuard client comes up.
+# wgclient-start — Merlin hotplug script run when a WireGuard client comes up.
 #
 
 # Triggered when a WireGuard client comes up -> add its subnet route
