@@ -21,15 +21,15 @@
 #
 # How to choose WG_CLIENT_SUBNET
 # ------------------------------
-# 1. Open the *server-side* config and look at the Address line. Example:
+# 1. Open the server-side config and look at the Address line. Example:
 #
 #        Address = 10.0.0.1/24
 #
 #    The /24 mask means every peer is in 10.0.0.0-10.0.0.255, i.e. the network
-#    **10.0.0.0/24**.
+#    10.0.0.0/24.
 #
-# 2. Use that *whole* network as WG_CLIENT_SUBNET below. This ensures that LAN
-#    devices can reply to *any* peer in the tunnel, not just the router's own IP.
+# 2. Use that whole network as WG_CLIENT_SUBNET below. This ensures that LAN
+#    devices can reply to any peer in the tunnel, not just the router's own IP.
 #
 # -------------------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ CLIENT_NUM=$2                     # Client number passed by Merlin hook
 # Validate action (must be add or del)
 case "$ACTION" in
   add|del) ;;          # allowed actions
-  *) exit 1 ;;         # anything else → hard error
+  *) exit 1 ;;         # anything else -> hard error
 esac
 
 #################################################################################

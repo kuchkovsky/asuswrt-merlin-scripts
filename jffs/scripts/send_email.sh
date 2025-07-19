@@ -2,10 +2,10 @@
 #
 # send_email.sh — lightweight email helper for Asuswrt-Merlin
 # -----------------------------------------------------------------------------
-# • Requires that **amtm email** is already configured. The script reads
-#   `/jffs/addons/amtm/mail/email.conf` plus the encrypted password file.
+# * Requires that amtm email is already configured. The script reads
+#   /jffs/addons/amtm/mail/email.conf plus the encrypted password file.
 #
-# • Usage:
+# * Usage:
 #     send_email.sh  "Subject text"  "Body text"
 #
 # -----------------------------------------------------------------------------
@@ -51,7 +51,7 @@ PASSWORD="$(/usr/sbin/openssl aes-256-cbc "$emailPwEnc" \
 ###############################################################################
 # Build the message
 ###############################################################################
-TMP_MAIL="/tmp/mail_$$.txt"     # $$ = PID → unique per run
+TMP_MAIL="/tmp/mail_$$.txt"     # $$ = PID -> unique per run
 trap 'rm -f "$TMP_MAIL"' EXIT   # always clean up
 
 FROM_NAME="ASUS $(nvram get model)"

@@ -2,12 +2,12 @@
 #
 # trim_ssd.sh — fstrim helper for a USB SSD on Asuswrt-Merlin
 # -------------------------------------------------------------------------------
-# • Assumes the drive is mounted at $SSD_MOUNT_POINT (see variable below).
-# • Runs `fstrim -v` so the kernel passes TRIM/UNMAP to the SSD, reclaiming
+# * Assumes the drive is mounted at $SSD_MOUNT_POINT (see variable below).
+# * Runs 'fstrim -v' so the kernel passes TRIM/UNMAP to the SSD, reclaiming
 #   space and keeping write speeds high.
-# • Intended to be called from cron, e.g. via:
+# * Intended to be called from cron, e.g. via:
 #       cru a trim_ssd "0 3 * * 0 /jffs/scripts/trim_ssd.sh"
-# • Pair this with ssd_provisioning_mode.sh, which sets provisioning_mode to
+# * Pair this with ssd_provisioning_mode.sh, which sets provisioning_mode to
 #   "unmap"; otherwise the SSD may ignore TRIM commands.
 # -------------------------------------------------------------------------------
 
@@ -26,7 +26,7 @@ if [ -d "$SSD_MOUNT_POINT" ]; then
     if OUTPUT=$(fstrim -v "$SSD_MOUNT_POINT" 2>&1); then
         log "fstrim succeeded: $OUTPUT"  # success path
     else
-        log "ERROR: $OUTPUT"             # fstrim failed → log & propagate error
+        log "ERROR: $OUTPUT"             # fstrim failed -> log & propagate error
         exit 1
     fi
 else

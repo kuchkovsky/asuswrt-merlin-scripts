@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------------
 # The Asuswrt UI can forward ports **only to the WAN interface**;
 # it offers no option to forward traffic that enters a WireGuard client tunnel
-# (`wgcX`) to LAN hosts. This helper script fills that gap:
+# (wgcX) to LAN hosts. This helper script fills that gap:
 #
 #   1. Creates a dedicated DNAT chain tied to the WG client interface.
 #   2. Reads PORT_FWD_MAPPINGS (one rule per line, TCP by default or UDP if
@@ -17,7 +17,7 @@
 # User-defined variables
 ###################################################################################
 
-# PORT_FWD_MAPPINGS — list of port forwarding rules, **one per line**:
+# PORT_FWD_MAPPINGS — list of port forwarding rules, one per line:
 #   EXT_PORT:DST_IP:DST_PORT[:PROTO]
 #     EXT_PORT   external port seen on the WG interface
 #     DST_IP     internal host that will receive the traffic

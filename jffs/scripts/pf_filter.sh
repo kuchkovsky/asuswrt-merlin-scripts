@@ -3,24 +3,24 @@
 # pf_filter.sh — early drop of spoofed/bogon packets targeting exposed DNAT ports
 # -------------------------------------------------------------------------------
 # What this script does:
-#   • Parses current VSERVER DNAT rules created by the ASUS GUI.
-#   • Extracts all unique TCP/UDP destination ports forwarded to LAN.
-#   • Compresses consecutive ports into compact -m multiport strings (TCP/UDP).
-#   • Creates or refreshes an ipset containing well-known bogon IPv4 prefixes.
-#   • Creates a dedicated chain in the raw table (VSERVER_FILTERING) with a
+#   * Parses current VSERVER DNAT rules created by the ASUS GUI.
+#   * Extracts all unique TCP/UDP destination ports forwarded to LAN.
+#   * Compresses consecutive ports into compact -m multiport strings (TCP/UDP).
+#   * Creates or refreshes an ipset containing well-known bogon IPv4 prefixes.
+#   * Creates a dedicated chain in the raw table (VSERVER_FILTERING) with a
 #     single DROP rule for packets from bogon IPs.
-#   • Adds iptables raw PREROUTING rules to jump into this chain only if
+#   * Adds iptables raw PREROUTING rules to jump into this chain only if
 #     the destination port matches one from VSERVER (i.e., exposed service).
 #
 # Key benefits:
-#   • Spoofed traffic is dropped before DNAT, conntrack, or routing overhead.
-#   • Avoids overhead from tracking bogus packets using connection tracking.
-#   • Dynamically adapts to changes in DNAT configuration.
+#   * Spoofed traffic is dropped before DNAT, conntrack, or routing overhead.
+#   * Avoids overhead from tracking bogus packets using connection tracking.
+#   * Dynamically adapts to changes in DNAT configuration.
 #
 # Requirements / Notes:
-#   • Applies only to IPv4 traffic; pair with ipset6 + ip6tables for IPv6.
-#   • Multiport rules are split into ≤15-port chunks (kernel limitation).
-#   • Intended for routers without double NAT — your ISP modem must be
+#   * Applies only to IPv4 traffic; pair with ipset6 + ip6tables for IPv6.
+#   * Multiport rules are split into ≤15-port chunks (kernel limitation).
+#   * Intended for routers without double NAT — your ISP modem must be
 #     in bridge mode and the router should receive a public IP
 #     directly on the WAN interface.
 #
@@ -66,7 +66,7 @@ BOGON_V4='
 #################################################################################
 # 1. Define a function to collect destination ports from VSERVER DNAT entries
 #################################################################################
-get_ports() {                      # $1 = tcp|udp → one port per line, sorted
+get_ports() {                      # $1 = tcp|udp -> one port per line, sorted
     iptables-save |
     awk -v P="$1" '
       $1 == "-A" && $2 == "VSERVER" {
@@ -146,7 +146,7 @@ UDP_PORTS=$(get_ports udp)
 MP_TCP=$(echo "$TCP_PORTS" | compress_ports)
 MP_UDP=$(echo "$UDP_PORTS" | compress_ports)
 
-# If both lists empty, VSERVER not initialised → exit quietly
+# If both lists empty, VSERVER not initialised -> exit quietly
 [ -z "$MP_TCP$MP_UDP" ] && exit 0
 
 #################################################################################

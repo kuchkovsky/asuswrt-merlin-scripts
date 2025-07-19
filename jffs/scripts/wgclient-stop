@@ -1,7 +1,7 @@
 #!/bin/sh
 #
-# wgclient-stop — Merlin hot-plug hook run when a WireGuard client goes **down**.
+# wgclient-stop — Merlin hot-plug hook run when a WireGuard client goes down.
 #
 
-# Triggered when a WireGuard client goes down → delete its subnet route
+# Triggered when a WireGuard client goes down -> delete its subnet route
 /jffs/scripts/wgclient_route.sh del "$1"

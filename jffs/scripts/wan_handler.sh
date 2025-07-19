@@ -2,9 +2,9 @@
 #
 # wan_handler.sh  –  full WAN-event logic for Asuswrt-Merlin
 # -------------------------------------------------------------------------------
-# Tested **only** with ASUS's **built-in Dual WAN feature**
+# Tested only with ASUS's built-in Dual WAN feature
 # (primary Ethernet + USB LTE dongle as secondary WAN).
-# It has **not** been validated with third-party Dual WAN scripts.
+# It has not been validated with third-party Dual WAN scripts.
 #
 # Invoked by the thin /jffs/scripts/wan-event launcher with:
 #     $1 = WAN number  (1 = secondary/backup WAN)
@@ -12,11 +12,11 @@
 #
 # Major components
 # ----------------
-# • notify_when_settled – sends email only after the router
+# * notify_when_settled – sends email only after the router
 #   has been up ≥ 3 min, preventing false alerts while the modem
 #   is still booting after a power outage.
-# • Optional LAN device firewall toggling (block/allow a host's WAN access).
-# • Flag file handling so that /jffs/scripts/firewall-start can
+# * Optional LAN device firewall toggling (block/allow a host's WAN access).
+# * Flag file handling so that /jffs/scripts/firewall-start can
 #   reapply the block rule after a firewall restart or reboot
 #   while the primary WAN is still down.
 #
@@ -47,7 +47,7 @@ BACKUP_WAN_FLAG="/tmp/backup_wan.enabled"
 #################################################################################
 #  Helper: send mail only after the router has "settled"
 #################################################################################
-#  ▸ WAN-not-ready logic:
+#    WAN-not-ready logic:
 #    After a cold boot the modem feeding the primary WAN often needs
 #    a minute or two to finish initialising.  During that window the
 #    router may briefly report "primary WAN down / secondary WAN up".
@@ -73,7 +73,7 @@ WAN0_PRIMARY_FLAG="$(nvram get wan0_primary)"
 WAN1_PRIMARY_FLAG="$(nvram get wan1_primary)"
 
 case "$2" in
-  connected)    # primary WAN down → using backup
+  connected)    # primary WAN down -> using backup
     if [ "$WAN0_PRIMARY_FLAG" = 0 ] && [ "$WAN1_PRIMARY_FLAG" = 1 ]; then
         touch "$BACKUP_WAN_FLAG"
         block_wan_for_host hostname    # <-- edit: delete this line if you only want email alerts,

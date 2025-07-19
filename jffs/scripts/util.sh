@@ -5,31 +5,31 @@
 # Public API
 # ----------
 #   is_lan_ip <ipv4>
-#       → returns **0** when the address is in an RFC‑1918 private subnet, or
-#         **1** when it is public / unroutable.
+#         returns 0 when the address is in an RFC‑1918 private subnet, or
+#         1 when it is public / unroutable.
 #
 #   resolve_ip <host-or-ip>
-#       → prints a single IPv4 address (LAN **or** WAN).  Accepts literal IPs,
+#         prints a single IPv4 address (LAN or WAN).  Accepts literal IPs,
 #         /etc/hosts aliases, or DNS names.  Exits non‑zero on failure.
 #
 #   resolve_lan_ip <host-or-ip>
-#       → like `resolve_ip`, **but additionally verifies** that the result lies
+#         like resolve_ip, but additionally verifies that the result lies
 #         in a private RFC‑1918 range.  Logs an error and exits non‑zero if not.
 #
 #   ensure_fw_rule <table> <chain> [-I|-D] <rule...>
-#       → Idempotent firewall helper:
-#           •  no flag    → append rule (-A) if it's missing
-#           •  -I         → insert rule (-I) at the top if missing
-#           •  -D         → delete rule (-D) if it exists
-#         Guarantees the rule appears **exactly once** (or not at all, for -D).
+#         Idempotent firewall helper:
+#           *  no flag    -> append rule (-A) if it's missing
+#           *  -I         -> insert rule (-I) at the top if missing
+#           *  -D         -> delete rule (-D) if it exists
+#         Guarantees the rule appears exactly once (or not at all, for -D).
 #
 #   block_wan_for_host <hostname|ip>
-#       → Resolves the host to a LAN IP and **inserts** a `REJECT` rule into the
-#         `filter/FORWARD` chain, blocking that device's WAN access.
+#         Resolves the host to a LAN IP and inserts a REJECT rule into the
+#         filter/FORWARD chain, blocking that device's WAN access.
 #
 #   allow_wan_for_host <hostname|ip>
-#       → Resolves the host to a LAN IP and **removes** the corresponding
-#         `REJECT` rule, restoring WAN access for that device.
+#         Resolves the host to a LAN IP and removes the corresponding
+#         REJECT rule, restoring WAN access for that device.
 #
 # Internal helpers (names starting with an underscore) are considered private
 # implementation details and may change without notice.
@@ -39,9 +39,9 @@
 _log_util() { logger -s -t util "$1"; }
 
 ####################################################################################
-# _resolve_ip_impl – shared resolver used by both public resolve* functions.
-#   • If the argument already looks like an IPv4 address, return it unchanged.
-#   • Else:  (1) consult /etc/hosts  (2) fall back to BusyBox nslookup.
+# _resolve_ip_impl – shared resolver used by both public resolve functions.
+#   * If the argument already looks like an IPv4 address, return it unchanged.
+#   * Else:  (1) consult /etc/hosts  (2) fall back to BusyBox nslookup.
 ####################################################################################
 _resolve_ip_impl() {
     local arg="$1" host ip
@@ -118,16 +118,16 @@ resolve_lan_ip() {
 }
 
 ####################################################################################
-# ensure_fw_rule  – creates `iptables` rules without duplicates
+# ensure_fw_rule  – creates iptables rules without duplicates
 #                   and avoids attempts to delete non-existent rules
 #
 # Usage:
 #   ensure_fw_rule <table> <chain> [-I | -A] <rule...>   # add (insert or append)
 #   ensure_fw_rule <table> <chain> -D    <rule...>       # delete if present
 #
-# Notes
-#   • Default without a flag is "append" (-A).
-#   • Works only for IPv4; pair with ip6tables for IPv6.
+# Notes:
+#   * Default without a flag is "append" (-A).
+#   * Works only for IPv4; pair with ip6tables for IPv6.
 ####################################################################################
 ensure_fw_rule() {
     local table=$1 chain=$2; shift 2
