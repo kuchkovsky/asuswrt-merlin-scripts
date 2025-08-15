@@ -1,0 +1,91 @@
+#!/usr/bin/env ash
+
+#######################################################################################
+# wgc_route.sh - toggle static routes for a WireGuard client on Asuswrt-Merlin
+# -------------------------------------------------------------------------------------
+# What this script does:
+#   * When <client#> matches WG_CLIENT_NUMBER:
+#       - Adds or deletes routes for WG_CLIENT_SUBNETS via wgcN
+#       - Ensures traffic to peers is routed correctly through the tunnel
+#   * If <client#> does not match, exits silently.
+#
+# Usage:
+#   wgc_route.sh add 1      # invoked by wgclient-start
+#   wgc_route.sh del 1      # invoked by wgclient-stop
+#######################################################################################
+
+# -------------------------------------------------------------------------------------
+# Abort script on any error
+# -------------------------------------------------------------------------------------
+set -euo pipefail
+
+#######################################################################################
+# 0a. Define constants & variables
+#######################################################################################
+
+# -------------------------------------------------------------------------------------
+# WG_CLIENT_NUMBER - index of the WireGuard client this script manages
+# -------------------------------------------------------------------------------------
+# Specifies which wgcN interface is managed by this script.
+#
+# Example:
+#   WG_CLIENT_NUMBER=1 -> interface is wgc1
+# -------------------------------------------------------------------------------------
+WG_CLIENT_NUMBER=1
+
+# -------------------------------------------------------------------------------------
+# WG_CLIENT_SUBNETS - subnets behind the WireGuard client that LAN should reach
+# -------------------------------------------------------------------------------------
+# How to choose:
+#   1. Check the server-side WireGuard config for its Address.
+#      Example:
+#
+#      Address = 10.0.0.1/24
+#
+#      The /24 mask implies the network is 10.0.0.0/24 (i.e. 10.0.0.0-10.0.0.255).
+#
+#   2. Use that full network as a WG_CLIENT_SUBNETS entry. This ensures LAN hosts
+#      can respond to any tunnel peer, not just the router's own WG IP.
+#
+#   3. Optionally, include any additional private subnets that need LAN access.
+# -------------------------------------------------------------------------------------
+WG_CLIENT_SUBNETS='
+10.0.0.0/24
+'
+
+#######################################################################################
+# 0b. Parse args
+#######################################################################################
+ACTION="$1"        # add | del  (requested operation)
+CLIENT_NUM="$2"    # client number passed by Merlin hook
+
+#######################################################################################
+# 0c. Guard clauses - exit early if the event isn't relevant
+#######################################################################################
+
+# Skip events for WireGuard clients we don't manage
+[ "$CLIENT_NUM" = "$WG_CLIENT_NUMBER" ] || exit 0
+
+# Validate action (must be add or del)
+case "$ACTION" in
+    add|del)  ;;         # allowed actions
+    *) exit 0 ;;         # anything else -> exit
+esac
+
+#######################################################################################
+# 0d. Load utils
+#######################################################################################
+. /jffs/scripts/utils/common.sh
+
+#######################################################################################
+# 1. Add or delete the static routes
+#######################################################################################
+DEV="wgc$WG_CLIENT_NUMBER"
+
+for subnet in $(strip_comments "$WG_CLIENT_SUBNETS"); do
+    if ip route "$ACTION" "$subnet" dev "$DEV" >/dev/null 2>&1; then
+        log "Route $ACTION succeeded for $subnet via $DEV"
+    else
+        log -l err "Route $ACTION failed for $subnet via $DEV"
+    fi
+done
