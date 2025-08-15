@@ -1,7 +1,8 @@
 #!/bin/sh
-#
-# wan-event — Merlin hotplug script invoked on WAN interface up/down events.
-#
 
-# Hand off WAN events processing to the main handler
-/jffs/scripts/wan_handler.sh "$@"
+###################################################################################################
+# wan-event - Asuswrt-Merlin hook invoked when a WAN interface goes up / down
+###################################################################################################
+
+# Hand off WAN events processing to the failover handler
+/jffs/scripts/misc/wan_failover.sh "$@"
