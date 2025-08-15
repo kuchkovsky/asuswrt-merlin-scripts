@@ -1,5 +1,5 @@
 /*
- * xpsb(byt)  – format "bytes per second" as bits/s with the unit chosen
+ * xpsb(byt)  - format "bytes per second" as bits/s with the unit chosen
  *              by getTrafficUnit():
  *                 0 / 9 -> Kb/s, 1 -> Mb/s, 2 -> Gb/s, 3 -> Tb/s
  *              Returns a string like "1,234.56 <small>Mb/s</small>"

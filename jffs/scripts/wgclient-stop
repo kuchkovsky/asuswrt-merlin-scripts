@@ -1,7 +1,8 @@
 #!/bin/sh
-#
-# wgclient-stop — Merlin hotplug script run when a WireGuard client goes down.
-#
+
+###################################################################################################
+# wgclient-stop - Asuswrt-Merlin hook invoked when a WireGuard client goes down
+###################################################################################################
 
 # Triggered when a WireGuard client goes down -> delete its subnet route
-/jffs/scripts/wgclient_route.sh del "$1"
+/jffs/scripts/wireguard/wgc_route.sh del "$1"
