@@ -1,0 +1,3 @@
+alias ipw="/jffs/scripts/firewall/ipset_builder.sh -w"
+alias ipt="/jffs/scripts/firewall/ipset_builder.sh -t"
+alias wpf="/jffs/scripts/wireguard/wgc_port_forwarder.sh"

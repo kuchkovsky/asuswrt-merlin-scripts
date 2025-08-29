@@ -1,7 +1,8 @@
 #!/bin/sh
-#
-# wgclient-start — Merlin hotplug script run when a WireGuard client comes up.
-#
+
+###################################################################################################
+# wgclient-start - Asuswrt-Merlin hook invoked when a WireGuard client comes up
+###################################################################################################
 
 # Triggered when a WireGuard client comes up -> add its subnet route
-/jffs/scripts/wgclient_route.sh add "$1"
+/jffs/scripts/wireguard/wgc_route.sh add "$1"

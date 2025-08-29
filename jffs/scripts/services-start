@@ -1,34 +1,49 @@
 #!/bin/sh
-#
-# services-start — Merlin boot-completion script (runs once each boot)
-# ---------------------------------------------------------------------------
-# 1. User-defined logic (cron jobs, UI tweaks, optional startup mail)
-# 2. Third-party plugins
-# ---------------------------------------------------------------------------
 
-#############################################################################
+###################################################################################################
+# services-start - Asuswrt-Merlin hook invoked on boot completion
+###################################################################################################
+
+###################################################################################################
 # 1. User-defined logic
-#############################################################################
+###################################################################################################
 
-# -------- Patch Traffic Monitor JS to show Kb/s / Mb/s in the table --------
-/jffs/scripts/mount_tmcal.sh   # merges /www/tmcal.js with /jffs/tmcal.js.add
+# ----------------------------------------- Builds ipsets -----------------------------------------
+# The build process can be resource-intensive (especially on first run),
+# so it is launched in the background.
+#
+# To prevent unfiltered traffic exposure, a temporary killswitch is enabled
+# until all ipsets are fully built and applied.
+# After the build completes, the WAN Firewall and Tunnel Director scripts
+# are started automatically to apply rules against the fresh ipsets.
+# Once those scripts finish, the killswitch is disabled.
+#
+# Flow: IPSet Builder -> WAN Firewall -> Tunnel Director
+(/jffs/scripts/firewall/ipset_builder.sh -k -w -t) &
 
-# -------------------------------- Cron jobs --------------------------------
-#  trim_ssd        – run every Sunday 03:00, sends fstrim to the USB SSD
-#  upgrade_nextdns – run every Sunday 04:00, upgrades NextDNS binary
-cru a trim_ssd        "0 3 * * 0 /jffs/scripts/trim_ssd.sh"
-cru a upgrade_nextdns "0 4 * * 0 /jffs/nextdns/nextdns upgrade"
+# ------------------- Patch Traffic Monitor JS to show Kb/s / Mb/s in the table -------------------
+/jffs/scripts/misc/mount_tmcal.sh   # merges /www/tmcal.js with /jffs/tmcal.js.add
 
-# -------------------------- Startup notification ---------------------------
-# Sends a "router booted" email 60 seconds after network comes up.
+# ------------------------------------------- Cron jobs -------------------------------------------
+# update_all_ipsets      - run every day 03:00, updates all ipset DBs
+# update_cust_ipsets     - run every day 15:00, updates custom ipset DBs
+# trim_ssd               - run every Sunday 04:00, sends fstrim to the USB SSD
+# upgrade_nextdns        - run every Sunday 05:00, upgrades NextDNS binary
+cru a update_all_ipsets  "0 3 * * * /jffs/scripts/firewall/ipset_builder.sh -u"
+cru a update_cust_ipsets "0 15 * * * /jffs/scripts/firewall/ipset_builder.sh -uc"
+cru a trim_ssd           "0 4 * * 0 /jffs/scripts/ssd/ssd_trim.sh st5"
+cru a upgrade_nextdns    "0 5 * * 0 /jffs/nextdns/nextdns upgrade"
+
+# -------------------------------------- Startup notification -------------------------------------
+# Send a "router booted" email 60 seconds after network comes up.
 # Handy for spotting power outages: if you receive the message without having
 # rebooted the router yourself, it means power must have dropped.
-(sleep 60; /jffs/scripts/send_email.sh "🟢 Startup Notification" \
+(sleep 60; /jffs/scripts/utils/send_email.sh "🟢 Startup Notification" \
     "I've just started up and got connected to the internet.") &
 
-#############################################################################
+###################################################################################################
 # 2. Third-party plugins
-#############################################################################
+###################################################################################################
 
 # NextDNS init script (leave or remove depending on your setup)
 /jffs/nextdns/nextdns.init start

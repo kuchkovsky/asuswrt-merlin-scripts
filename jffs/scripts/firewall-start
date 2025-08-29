@@ -1,16 +1,12 @@
 #!/bin/sh
-#
-# firewall-start — Merlin hotplug script executed every time the firewall
-#                  stack reloads.
-#
 
-# Optional: remove or comment out this block if you only need email alerts.
-#
-# If the firewall restarted while the backup WAN was active,
-# reapply the LAN host WAN-block rule.
-if [ -f /tmp/backup_wan.enabled ]; then
-    . /jffs/scripts/util.sh && block_wan_for_host hostname    # <-- edit: replace with the host to block
-fi
+###################################################################################################
+# firewall-start - Asuswrt-Merlin hook invoked when the firewall stack reloads
+###################################################################################################
 
-# Drop spoofed bogon ranges coming from WAN
-/jffs/scripts/pf_filter.sh
+# If the firewall restarted while the secondary WAN was active,
+# reapply the LAN hosts WAN-block rule
+/jffs/scripts/misc/wan_failover.sh "$1" "fw_started"
+
+# Apply Tunnel Director rules
+/jffs/scripts/firewall/tunnel_director.sh
