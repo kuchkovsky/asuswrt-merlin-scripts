@@ -43,7 +43,9 @@
 #   * By default, Tunnel Director reserves 8 bits of the fwmark (bits 16–23), which allows
 #     for up to 255 distinct rules. If you need more, you can adjust TUN_DIR_MARK_MASK and
 #     TUN_DIR_MARK_SHIFT in config.sh (see section 10 for details).
-#   * IPv4 only; extend to IPv6 if needed.
+#   * IPv4-only for now, as Merlin's VPN implementation does not treat IPv6 as
+#     a first-class citizen by default. IPv6 functionality may be considered for
+#     implementation in the future.
 ###################################################################################################
 
 # -------------------------------------------------------------------------------------------------

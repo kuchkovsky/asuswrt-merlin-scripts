@@ -6,64 +6,69 @@
 # Public API
 # ----------
 #   uuid4
-#         Generates a kernel-provided random UUIDv4 (RFC 4122) string.
+#       Generates a kernel-provided random UUIDv4 (RFC 4122) string.
 #
 #   compute_hash
-#         Computes a SHA-256 digest of a file or stdin
+#       Computes a SHA-256 digest of a file or stdin.
 #
 #   get_script_path
-#         Returns the absolute path to the current script, resolving symlinks.
+#       Returns the absolute path to the current script, resolving symlinks.
 #
 #   get_script_dir
-#         Returns the directory containing the current script.
+#       Returns the directory containing the current script.
 #
 #   get_script_name [-n]
-#         Returns the script's filename. With -n, strips the extension.
+#       Returns the script's filename. With -n, strips the extension.
 #
 #   log [-l <level>] <message...>
-#         Lightweight syslog wrapper. Logs to both syslog (user facility)
-#         and stderr. Supports priority levels with optional -l flag.
+#       Lightweight syslog wrapper. Logs to both syslog (user facility) and stderr.
+#       Supports priority levels with optional -l flag.
 #
 #   acquire_lock [<name>]
-#         Acquires an exclusive non-blocking lock via /var/lock/<name>.lock;
-#         exits early if another instance is already running.
+#       Acquires an exclusive non-blocking lock via /var/lock/<name>.lock; exits early if another
+#       instance is already running.
 #
 #   tmp_file
-#         Creates a UUID-named /tmp file tied to the script and tracks it for
-#         automatic cleanup on exit (via trap).
+#       Creates a UUID-named /tmp file tied to the script and tracks it for automatic cleanup.
 #
 #   tmp_dir
-#         Creates a UUID-named /tmp directory tied to the script and tracks it for
-#         automatic cleanup on exit (via trap).
+#       Creates a UUID-named /tmp directory tied to the script and tracks it for automatic cleanup.
 #
-#   is_lan_ip <ipv4>
-#         returns 0 when the address is in an RFC-1918 private subnet, or
-#         1 when it is public / unroutable.
+#   is_lan_ip [-6] <ip>
+#       Returns 0 when the address is in a private/LAN range, else 1.
+#       IPv4: RFC1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+#       IPv6: ULA (fc00::/7) and link-local (fe80::/10)  [heuristic prefix check]
 #
-#   resolve_ip <host-or-ip>
-#         prints a single IPv4 address (LAN or WAN).  Accepts literal IPs,
-#         /etc/hosts aliases, or DNS names.  Exits non-zero on failure.
+#   resolve_ip [-6] [-q] [-g] [-a] <host|ip>
+#       Resolves a host or literal IP to one or more addresses.
+#         -6 : resolve IPv6 (default: IPv4)
+#         -q : quiet on resolution failure
+#         -g : only global IPv6 / public IPv4
+#         -a : return ALL matches (default: first match only)
+#       Accepts literal IPs, /etc/hosts aliases, or DNS names.
 #
-#   resolve_lan_ip <host-or-ip>
-#         like resolve_ip, but additionally verifies that the result lies
-#         in a private RFC-1918 range.  Logs an error and exits non-zero if not.
+#   resolve_lan_ip [-6] [-q] [-a] <host|ip>
+#       Like resolve_ip, but returns only private/LAN addresses for the selected family.
+#         -6 : IPv6 (ULA / link-local considered LAN)
+#         -q : quiet on resolution failure
+#         -a : return ALL LAN matches (default: first only)
+#
+#   get_ipv6_enabled
+#       Prints 1 if IPv6 is enabled in NVRAM (ipv6_service != disabled), otherwise 0.
 #
 #   get_active_wan_if
-#         Returns the name of the currently active WAN interface (e.g., eth0, eth10).
-#         Falls back to wan0_ifname if none are marked primary.
+#       Returns the name of the currently active WAN interface (e.g., eth0, eth10).
 #
 #   strip_comments [<text>]
-#         Removes leading/trailing whitespace, drops blank/# lines, and strips
-#         inline '#' comments. Reads from the argument if given, else stdin;
-#         prints cleaned lines.
+#       Removes leading/trailing whitespace, drops blank/# lines, and strips inline '#' comments.
+#       Reads from the argument if given, else stdin; prints cleaned lines.
 #
 #   is_pos_int <value>
-#         Returns success (0) if <value> is a positive integer (>=1); else returns 1.
+#       Returns success (0) if <value> is a positive integer (>=1); else returns 1.
 #
 # Notes
 # -----
-#   * Internal functions (names starting with an underscore) are considered private
-#     implementation details and may change without notice.
+#   * Use -6 in functions to select IPv6 (where applicable).
 ###################################################################################################
 
 # -------------------------------------------------------------------------------------------------
@@ -75,53 +80,129 @@
 ###################################################################################################
 # _resolve_ip_impl - internal resolver used by resolve_ip / resolve_lan_ip
 # -------------------------------------------------------------------------------------------------
+# Flags:
+#   -6 : resolve IPv6 (default: IPv4)
+#   -g : only global IPv6 or public IPv4
+#   -a : return ALL matching addresses (default: first match only)
+#
 # Behavior:
-#   * If the argument looks like a literal IPv4, returns it as-is.
+#   * If the argument looks like a literal IP of the selected family, returns it
+#     (respects -g; rejects non-global v6 / non-public v4 when -g is set).
 #   * Else tries:
-#       (1) /etc/hosts alias match
-#       (2) nslookup fallback
-#   * On success: prints the resolved IP.
-#   * On failure: prints nothing.
+#       (1) /etc/hosts alias match (first column must match family)
+#       (2) nslookup fallback (first "Name:" block; scan "Address ..." lines)
+#   * Prints one or more IPs (depending on -a) on success; prints nothing on failure.
 #
 # Internal-only. Do not call directly.
 ###################################################################################################
 _resolve_ip_impl() {
-    local arg="$1" host ip
+    # Parse flags
+    local use_v6=0 only_global=0 return_all=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -6) use_v6=1; shift ;;
+            -g) only_global=1; shift ;;
+            -a) return_all=1; shift ;;
+            --) shift; break ;;
+            *)  break ;;
+        esac
+    done
 
-    # 1. Literal IPv4? Return it
-    if printf '%s\n' "$arg" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
-        printf '%s\n' "$arg"
+    local arg="${1-}"
+    [ -n "$arg" ] || return 1
+
+    # Patterns
+    local ipv4_pat='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+    local ipv6_pat='^[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*$'
+    local ipv4_private_pat='^(10\.|127\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.)'
+    local ipv6_private_pat='^(::1|[Ff][CcDd].*|[Ff][Ee][89AaBb][0-9A-Fa-f]{2}:.*)$'
+
+    # Select family
+    local fam_pat non_global_pat g_flags
+    if [ "$use_v6" -eq 1 ]; then
+        fam_pat="$ipv6_pat"; non_global_pat="$ipv6_private_pat"; g_flags='-Eiq'
+    else
+        fam_pat="$ipv4_pat"; non_global_pat="$ipv4_private_pat";  g_flags='-Eq'
+    fi
+
+    # Helper: emit if matches family and (if -g) is global/public
+    _emit_if_ok() {
+        local cand="$1"
+        printf '%s\n' "$cand" | grep $g_flags -- "$fam_pat" >/dev/null || return 1
+        if [ "$only_global" -eq 1 ] && printf '%s\n' "$cand" |
+            grep $g_flags -- "$non_global_pat" >/dev/null;
+        then
+            return 1
+        fi
+        printf '%s\n' "$cand"
+        return 0
+    }
+
+    # Literal IP fast path
+    if _emit_if_ok "$arg"; then
         return 0
     fi
 
-    host="${arg%.}"   # strip trailing dot, if any
+    local host="${arg%.}"  # strip trailing dot
 
-    # 2. /etc/hosts (match any alias column)
-    ip=$(awk -v h="$host" '
-        $1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {
-            for (i = 2; i <= NF; i++) {
-                gsub(/\.$/, "", $i)
-                if ($i == h) { print $1; exit }
-            }
-        }' /etc/hosts)
+    if [ "$return_all" -eq 0 ]; then
+        # First match only (no dedup)
+        local ip
+        ip=$(
+            awk -v h="$host" -v pat="$fam_pat" -v only_g="$only_global" \
+                -v ng="$non_global_pat" '
+                $1 ~ pat {
+                    if (only_g && $1 ~ ng) next
+                    for (i = 2; i <= NF; i++) {
+                        gsub(/\.$/, "", $i)
+                        if ($i == h) { print $1; exit }
+                    }
+                }' /etc/hosts 2>/dev/null
+        )
+        [ -n "$ip" ] && { printf '%s\n' "$ip"; return 0; }
 
-    # 3. nslookup fallback - only read Address lines after the first "Name:"
-    if [ -z "$ip" ]; then
-        ip=$(nslookup "$host" 2>/dev/null |
-             awk '
+        ip=$(
+            nslookup "$host" 2>/dev/null |
+            awk -v pat="$fam_pat" -v only_g="$only_global" -v ng="$non_global_pat" '
                 BEGIN { in_ans = 0 }
-                /^Name:[[:space:]]*/ { in_ans = 1; next }   # start of answer block
+                /^Name:[[:space:]]*/ { in_ans = 1; next }
                 in_ans && /^Address/ {
                     for (i = 1; i <= NF; i++)
-                        if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) { print $i; exit }
-                }')
+                        if ($i ~ pat && !(only_g && $i ~ ng)) { print $i; exit }
+                }'
+        )
+        [ -n "$ip" ] || return 1
+        printf '%s\n' "$ip"
+        return 0
     fi
 
-    if [ -z "$ip" ]; then
-        return 1
-    fi
+    # Return ALL matches (-a): gather + order-preserving dedup; avoid SC2181 by capturing output.
+    local out
+    out="$(
+        {
+            awk -v h="$host" -v pat="$fam_pat" -v only_g="$only_global" \
+                -v ng="$non_global_pat" '
+                $1 ~ pat {
+                    if (only_g && $1 ~ ng) next
+                    for (i = 2; i <= NF; i++) {
+                        gsub(/\.$/, "", $i)
+                        if ($i == h) print $1
+                    }
+                }' /etc/hosts 2>/dev/null
 
-    printf '%s\n' "$ip"
+            nslookup "$host" 2>/dev/null |
+            awk -v pat="$fam_pat" -v only_g="$only_global" -v ng="$non_global_pat" '
+                BEGIN { in_ans = 0 }
+                /^Name:[[:space:]]*/ { in_ans = 1; next }
+                in_ans && /^Address/ {
+                    for (i = 1; i <= NF; i++)
+                        if ($i ~ pat && !(only_g && $i ~ ng)) print $i
+                }'
+        } | awk '!seen[$0]++'
+    )"
+
+    [ -n "$out" ] || return 1
+    printf '%s\n' "$out"
     return 0
 }
 
@@ -377,71 +458,190 @@ _cleanup_tmp() {
 trap _cleanup_tmp EXIT INT TERM
 
 ###################################################################################################
-# is_lan_ip - returns 0 for RFC-1918 (private) IPv4 addresses, 1 otherwise
+# is_lan_ip - returns 0 for private/LAN addresses, 1 otherwise
 # -------------------------------------------------------------------------------------------------
 # Usage:
 #   is_lan_ip <ipv4>
+#   is_lan_ip -6 <ipv6>
 #
-# Example:
-#   is_lan_ip 192.168.1.100  ->  returns 0
-#   is_lan_ip 8.8.8.8        ->  returns 1
+# Args:
+#   -6    : OPTIONAL; check IPv6 instead of IPv4
+#   <ip>  : address to check
+#
+# Behavior:
+#   * IPv4: returns 0 for RFC-1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16).
+#   * IPv6: returns 0 for ULA (fc00::/7) and link-local (fe80::/10).
+#   * Returns 1 otherwise.
+#
+# Examples:
+#   is_lan_ip 192.168.1.100   -> returns 0
+#   is_lan_ip 8.8.8.8         -> returns 1
+#   is_lan_ip -6 fd12::1      -> returns 0
+#   is_lan_ip -6 2001:4860::  -> returns 1
 ###################################################################################################
 is_lan_ip() {
-    case "$1" in
-        192.168.*)                              return 0 ;;   # 192.168.0.0/16
-        10.*)                                   return 0 ;;   # 10.0.0.0/8
-        172.1[6-9].*|172.2[0-9].*|172.3[0-1].*) return 0 ;;   # 172.16.0.0/12
-        *)                                      return 1 ;;
-    esac
+    local use_v6=0 ip
+
+    if [ "$1" = "-6" ]; then
+        use_v6=1
+        shift
+    fi
+    ip="${1-}"
+
+    if [ "$use_v6" -eq 1 ]; then
+        case "$ip" in
+            [Ff][Cc]*|[Ff][Dd]*)                    return 0 ;;   # ULA fc00::/7
+            [Ff][Ee][89AaBb]*)                      return 0 ;;   # link-local fe80::/10
+            *)                                      return 1 ;;
+        esac
+    else
+        case "$ip" in
+            192.168.*)                              return 0 ;;   # 192.168.0.0/16
+            10.*)                                   return 0 ;;   # 10.0.0.0/8
+            172.1[6-9].*|172.2[0-9].*|172.3[0-1].*) return 0 ;;   # 172.16.0.0/12
+            *)                                      return 1 ;;
+        esac
+    fi
 }
 
 ###################################################################################################
-# resolve_ip - resolve host/IP to a single IPv4 address (LAN or WAN)
+# resolve_ip - resolve host/IP to one or more IPs
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   resolve_ip <host-or-ip>
+#   resolve_ip [-6] [-q] [-g] [-a] <host|ip>
+#
+# Flags:
+#   -6  : resolve IPv6 (default: IPv4)
+#   -q  : quiet on resolution failure
+#   -g  : only global IPv6 / public IPv4
+#   -a  : return ALL matching addresses (default: first match only)
 #
 # Behavior:
 #   * Accepts literal IPs, /etc/hosts entries, or DNS names.
-#   * Returns the resolved IPv4 address on success.
-#   * Fails with an error if resolution fails.
+#   * Prints the resolved address(es) on success (one per line if -a).
+#   * Fails with an error if resolution fails or arg is missing.
 ###################################################################################################
 resolve_ip() {
-    local ip
+    local use_v6=0 quiet=0 only_global=0 return_all=0
 
-    ip=$(_resolve_ip_impl "$1")
-    if [ -z "$ip" ]; then
-        log -l err "Cannot resolve '$1'"
+    # Parse flags
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -6) use_v6=1; shift ;;
+            -q) quiet=1; shift ;;
+            -g) only_global=1; shift ;;
+            -a) return_all=1; shift ;;
+            --) shift; break ;;
+            *)  break ;;
+        esac
+    done
+
+    local arg="${1-}" out
+    if [ -z "$arg" ]; then
+        log -l err "resolve_ip: usage: resolve_ip [-6] [-q] [-g] [-a] <host|ip>"
         return 1
     fi
 
-    printf '%s\n' "$ip"
+    # Build argv for _resolve_ip_impl
+    set --
+    [ "$use_v6" -eq 1 ]      && set -- "$@" -6
+    [ "$only_global" -eq 1 ] && set -- "$@" -g
+    [ "$return_all" -eq 1 ]  && set -- "$@" -a
+    set -- "$@" "$arg"
+
+    if ! out="$(_resolve_ip_impl "$@")"; then
+        [ "$quiet" -eq 1 ] || log -l err "Cannot resolve '$arg'"
+        return 1
+    fi
+
+    printf '%s\n' "$out"
 }
 
 ###################################################################################################
 # resolve_lan_ip - resolve host/IP and validate it belongs to a private LAN range
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   resolve_lan_ip <host-or-ip>
+#   resolve_lan_ip [-6] [-q] [-a] <host|ip>
+#
+# Flags:
+#   -6  : resolve IPv6 (ULA / link-local considered LAN)
+#   -q  : quiet on resolution failure
+#   -a  : return ALL matching LAN addresses (default: first match only)
 #
 # Behavior:
-#   * Uses resolve_ip internally.
-#   * Then enforces RFC-1918 check (10/8, 172.16/12, 192.168/16).
-#   * Fails with error if the resolved IP is not private.
+#   * Resolves via resolve_ip for the requested family.
+#   * Filters to LAN/private addresses:
+#       - IPv4: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+#       - IPv6: fc00::/7 (ULA), fe80::/10 (link-local)
+#   * Prints the LAN address(es) on success; errors if none match.
 ###################################################################################################
 resolve_lan_ip() {
-    local ip
+    local use_v6=0 v6_flag="" quiet=0 q_flag="" return_all=0
 
-    # Reuse the generic resolver first
-    ip=$(resolve_ip "$1") || return 1
+    # Parse flags
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -6) use_v6=1; v6_flag="-6"; shift ;;
+            -q) quiet=1; q_flag="-q"; shift ;;
+            -a) return_all=1; shift ;;
+            --) shift; break ;;
+            *)  break ;;
+        esac
+    done
 
-    # Then enforce RFC-1918 check
-    if ! is_lan_ip "$ip"; then
-        log -l err "'$ip' is not a LAN address"
+    local arg="${1-}"
+    if [ -z "$arg" ]; then
+        log -l err "resolve_lan_ip: usage: resolve_lan_ip [-6] [-q] [-a] <host|ip>"
         return 1
     fi
 
-    printf '%s\n' "$ip"
+    # Resolve all candidates for the chosen family
+    local all filtered out
+
+    all="$(resolve_ip $v6_flag $q_flag -a "$arg")" || return 1
+
+    # Keep only LAN / private addresses
+    filtered="$(
+        printf '%s\n' "$all" | while IFS= read -r ip; do
+            is_lan_ip $v6_flag "$ip" && printf '%s\n' "$ip"
+        done
+    )"
+
+    if [ -z "$filtered" ]; then
+        [ "$quiet" -eq 1 ] || log -l err "No LAN address found for '$arg'"
+        return 1
+    fi
+
+    out="$filtered"
+    if [ "$return_all" -eq 0 ]; then
+        out="$(printf '%s\n' "$filtered" | head -n1)"
+    fi
+
+    printf '%s\n' "$out"
+}
+
+###################################################################################################
+# get_ipv6_enabled - check if IPv6 is enabled in router settings
+# -------------------------------------------------------------------------------------------------
+# Usage:
+#   IPV6_ENABLED="$(get_ipv6_enabled)"
+#
+# Behavior:
+#   * Reads the NVRAM variable "ipv6_service".
+#   * Prints "1" if set and not "disabled"; otherwise prints "0".
+#
+# Output / Returns:
+#   * Prints: 1 (enabled) or 0 (disabled)
+#   * Exit status: always 0 (safe under `set -e`)
+###################################################################################################
+get_ipv6_enabled() {
+    local s
+    s="$(nvram get ipv6_service 2>/dev/null || true)"
+    if [ -n "$s" ] && [ "$s" != "disabled" ]; then
+        printf '1\n'
+    else
+        printf '0\n'
+    fi
 }
 
 ###################################################################################################
