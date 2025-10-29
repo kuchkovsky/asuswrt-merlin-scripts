@@ -8,5 +8,11 @@
 # reapply the LAN hosts WAN-block rule
 /jffs/scripts/misc/wan_failover.sh "$1" "fw_started"
 
+# Apply SDN IPv6 firewall rules
+/jffs/scripts/sdn/sdn_v6_firewall.sh "$1"
+
+# Apply WAN Firewall rules
+/jffs/scripts/firewall/wan_firewall.sh
+
 # Apply Tunnel Director rules
 /jffs/scripts/firewall/tunnel_director.sh
