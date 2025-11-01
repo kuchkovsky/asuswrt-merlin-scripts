@@ -231,8 +231,8 @@ blk6:
 
   # Uncomment the URLs below for enhanced protection;
   # Replace YOUR_API_KEY for AbuseIPDB
-  https://lists.blocklist.de/lists/all.txt
-  https://api.abuseipdb.com/api/v2/blacklist -d plaintext -d ipVersion=6 -H "Key: YOUR_API_KEY"
+  # https://lists.blocklist.de/lists/all.txt
+  # https://api.abuseipdb.com/api/v2/blacklist -d plaintext -d ipVersion=6 -H "Key: YOUR_API_KEY"
 '
 
 ###################################################################################################
@@ -368,6 +368,7 @@ KILLSWITCH_V6_RULES='
 #   pass:any:any:pss                     # unconditionally allow matches from pss
 #   block:any:any:blk,cn,kp              # drop traffic from blocklist, CN or KP
 #   block:any:any:blk,cn,kp:exc1,exc2    # same as above, but skip exc1/2
+#   block:any:any:blk6,cn6,kp6           # IPv6: drop traffic from blocklist, CN or KP
 #   allow:80,443:any:rly,us              # allow rly/US, drop others on ports 80/443
 #   allow:1000-2000:tcp:ca               # allow CA, drop others on TCP ports 1000-2000
 #   log:123:udp:any                      # log all NTP with 5 min window, 1 IP
