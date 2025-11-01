@@ -1,9 +1,11 @@
 #!/bin/sh
 
 ###################################################################################################
-# nat-start - Asuswrt-Merlin hook invoked when the NAT table is initialized:
-#             reboot, WAN failover, etc.
+# dhcpc-event - Asuswrt-Merlin hook invoked on DHCP events
 ###################################################################################################
 
-# Apply WireGuard client port forwarding rules
-/jffs/scripts/wireguard/wgc_port_forwarder.sh
+# Assign IPv6 to the SDN bridges
+/jffs/scripts/sdn/sdn_v6_br.sh "$@"
+
+# Apply static IPv6 routes
+/jffs/scripts/misc/v6_static_routes.sh "$@"

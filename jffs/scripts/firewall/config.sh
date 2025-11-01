@@ -68,27 +68,34 @@ IPS_BDR_DIR='/jffs/ipset_builder'
 MAXMIND_LICENSE_KEY=''
 
 ###################################################################################################
-# 3. Custom ipsets
+# 3. Custom ipsets (IPv4 & IPv6)
 # -------------------------------------------------------------------------------------------------
 # Define named ipsets, each containing inline CIDRs and/or remote sources.
 #
+# Variables:
+#   CUSTOM_IPSETS     - IPv4 definitions
+#   CUSTOM_V6_IPSETS  - IPv6 definitions
+#
 # Format:
 #   <set_name>:
-#     * Inline CIDR entries (e.g., 1.2.3.4/32), optionally followed by comments (#).
+#     * Inline CIDR entries (e.g., 1.2.3.4/32 or 2001:db8::/32),
+#       optionally followed by comments (#).
 #     * Remote URLs (http/https) returning plain-text CIDR lists:
-#       - You may append curl options (e.g., -H, -d) to support headers, API keys, etc.
+#         - You may append curl options (-H, -d, etc.) to support headers, API keys, etc.
+#         - Each URL is downloaded, validated, and merged into the target ipset.
 #
 # Naming guidance:
-#   * Prefer 3-letter set names (not strictly required). Two-letter names are commonly
-#     used for country codes, and short names help stay within the total ipset name
-#     length limit when multiple ipsets are combined into a single combo set.
+#   * Prefer 3-letter names for IPv4 sets and 4-letter names with a "6" suffix for IPv6
+#     (not strictly required). Two-letter names and their IPv6 counterparts ending in "6"
+#     are commonly reserved for country codes. Shorter names help stay within the ipset
+#     name length limit, especially when multiple sets are combined into a single combo set.
 #   * If a set name or a generated combo set name exceeds 31 characters, it will be
 #     automatically truncated and replaced with a 24-character hash. This ensures the
 #     firewall remains fully operational, but makes logs harder to read. For this reason,
 #     shorter and more descriptive names are recommended whenever possible, so that
 #     syslog output stays human-readable.
 #
-# Default list:
+# Default list (IPv4):
 #   * "blk" baseline blocking uses FireHOL Level 1 - a curated aggregate
 #     blacklist providing maximum protection with minimal false positives.
 #     Suitable for basic protection on all internet-facing servers, routers,
@@ -106,7 +113,21 @@ MAXMIND_LICENSE_KEY=''
 #     Designed to avoid overly aggressive or controversial sources, reducing
 #     the risk of false positives while still blocking a wide range of threats.
 #
-# Recommended additions for stronger security (uncomment the lines in "blk"):
+# Default list (IPv6):
+#   * "blk6" baseline blocking uses two well-established, continuously
+#     maintained sources:
+#       * fullbogons-ipv6 - published by Team Cymru, listing all IPv6
+#         address ranges that are either unallocated or reserved by IANA
+#         and therefore should never appear in global routing tables.
+#         Blocking these prevents spoofing and misconfigured traffic.
+#       * dropv6 - published by Spamhaus, listing IPv6 ranges controlled
+#         by known spammers, malware distributors, and botnet C2 networks.
+#         It focuses on permanent, well-confirmed sources of abuse.
+#     This combination is intentionally conservative, avoiding overblocking
+#     while still filtering invalid or hostile IPv6 space that has no
+#     legitimate use on the public internet.
+#
+# Recommended additions for stronger IPv4 security (uncomment the lines in "blk"):
 #   * FireHOL Level 2 & 3 - broader threat coverage than Level 1.
 #       - Level 2: aggregates multiple blocklists tracking active attacks
 #         seen in roughly the last 48 hours, including:
@@ -152,23 +173,41 @@ MAXMIND_LICENSE_KEY=''
 #   * etn_aggressive - blacklist of aggressive IPs maintained by Etnetera.
 #       Listed in the Suricata IPS update rule source.
 #
+# Recommended additions for stronger IPv6 security (uncomment the lines in "blk6"):
+#   * blocklist.de - aggregates actively abusive IPv6 hosts reported worldwide.
+#   * AbuseIPDB - community-driven IPv6 abuse intelligence feed.
+# See detailed descriptions of these lists in the corresponding IPv4 section above.
+#
 # Note:
 #   All data sources listed under the same set name are aggregated using mapCIDR
 #   (if available), so overlapping entries are deduplicated automatically
 #   without impacting performance.
 #
-# Examples:
+# Examples (IPv4):
 #
 #   # A high-priority passlist for WAN Firewall rules
 #   # (overrides any blocklists or DoS Protection rules)
 #   pss:
-#     4.5.6.7                         # your VPS IP
-#     11.12.13.14                     # your friend's home IP
+#     4.5.6.7                         # your VPS IPv4
+#     11.12.13.14                     # your friend's home IPv4
 #
 #   # A custom list for other purposes
 #   lst:
-#     1.2.3.4/32                       # personal IP
+#     1.2.3.4/32                       # personal IPv4
 #     https://example.com/list.txt    -H "Authorization: Bearer TOKEN"
+#
+# Examples (IPv6):
+#
+#   # A high-priority passlist for WAN Firewall rules
+#   # (overrides any blocklists or DoS Protection rules)
+#   pss6:
+#     2001:db8:1:1::20                 # example VPS IPv6
+#     2001:db8:1:1::30                 # example friend's home IPv6
+#
+#   # A custom list for other purposes
+#   lst6:
+#     2001:db8:2:1::42/128             # personal IPv6
+#     https://example.com/list-v6.txt  -H "Authorization: Bearer TOKEN"
 ###################################################################################################
 CUSTOM_IPSETS='
 blk:
@@ -185,12 +224,26 @@ blk:
   # https://security.etnetera.cz/feeds/etn_aggressive.txt
 '
 
+CUSTOM_V6_IPSETS='
+blk6:
+  https://www.team-cymru.org/Services/Bogons/fullbogons-ipv6.txt
+  https://www.spamhaus.org/drop/dropv6.txt
+
+  # Uncomment the URLs below for enhanced protection;
+  # Replace YOUR_API_KEY for AbuseIPDB
+  https://lists.blocklist.de/lists/all.txt
+  https://api.abuseipdb.com/api/v2/blacklist -d plaintext -d ipVersion=6 -H "Key: YOUR_API_KEY"
+'
+
 ###################################################################################################
-# 4. Killswitch rules
+# 4. Killswitch rules (IPv4 & IPv6)
 # -------------------------------------------------------------------------------------------------
 # Temporarily block WAN ingress on specified ports:protos pairs during the first
 # ipset initialization phase (e.g., after system boot), before filtering is active.
 # This prevents exposure to unfiltered traffic while sets are still being built.
+#
+# IPv4 and IPv6 rules are defined separately in KILLSWITCH_RULES and
+# KILLSWITCH_V6_RULES. Both lists share the same syntax and behavior.
 #
 # One rule per line (blank lines are ignored; # comments are allowed).
 #
@@ -217,8 +270,11 @@ blk:
 KILLSWITCH_RULES='
 '
 
+KILLSWITCH_V6_RULES='
+'
+
 ###################################################################################################
-# 5. WAN Firewall rules (ipset-based)
+# 5. WAN Firewall rules (ipset-based; IPv4 & IPv6)
 # -------------------------------------------------------------------------------------------------
 # One rule per line (blank lines are ignored; # comments are allowed).
 #
@@ -231,6 +287,7 @@ KILLSWITCH_RULES='
 #     See the full list here (A-2 column, lowercase):
 #       https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes
 #     Codes must be lowercase and separated by commas when specifying multiple.
+#     For IPv6 rules, country-based set names must include the "6" suffix (e.g., "us6", "de6").
 #
 #   mode     -> pass  | allow | block | log
 #                pass  :  unconditional allow - traffic matching the listed set
@@ -282,11 +339,13 @@ KILLSWITCH_RULES='
 #
 # Logging:
 #   When a rule in "log" mode matches, packets are logged. Logs are prefixed
-#   with "ips_" and go to syslog. View them in the GUI (System Log ->
-#   General Log) or via CLI: 'grep ips_ /tmp/syslog.log'.
+#   with either "ips_" for IPv4 or "ips6_" for IPv6 and sent to syslog.
+#   You can view them in the GUI (System Log -> General Log) or via CLI:
+#       grep 'ips' /tmp/syslog.log
 #   The prefix format is:
-#     ips_<ports>_<t|u>_<set>[_<set_excl>]
-#   Examples: ips_80,443_t_blk   ips_22_t_blk_exc1
+#     ips[6]_<ports>_<t|u>_<set>[_<set_excl>]
+#   Examples: ips_80,443_t_blk   ips6_22_t_blk_exc1
+#     - 6           -> present for IPv6 logs
 #     - <ports>     -> original port spec (single, list, or range string)
 #     - <t|u>       -> first letter of protocol (tcp/udp)
 #     - <set>       -> keys list joined with underscores (e.g., blk,cn -> blk_cn)
@@ -318,8 +377,12 @@ WAN_FW_RULES='
 block:any:any:blk
 '
 
+WAN_FW_V6_RULES='
+block:any:any:blk6
+'
+
 ###################################################################################################
-# 6. DoS Protection rules (flood / DoS rate-limit)
+# 6. DoS Protection rules (flood / DoS rate-limit; IPv4 & IPv6)
 # -------------------------------------------------------------------------------------------------
 # One rule per line (blank lines are ignored; # comments are allowed).
 #
@@ -354,19 +417,23 @@ block:any:any:blk
 #       - Defaults: minutes=5, burst=3 -> about 3 log every 5 minutes for all IPs.
 #
 # Logging:
-#   When a rule's threshold is crossed, matching packets are logged. Logs are
-#   prefixed with "dos_" and go to syslog. View them in the GUI (System Log ->
-#   General Log) or via CLI: 'grep dos_ /tmp/syslog.log'.
+#   When a rule's threshold is exceeded, matching packets are logged. Logs are prefixed
+#   with either "dos_" for IPv4 or "dos6_" for IPv6 and sent to syslog.
+#   You can view them in the GUI (System Log -> General Log) or via CLI:
+#       grep 'dos' /tmp/syslog.log
 #   The prefix format is:
-#     dos_<ip|port>_<port>_<t|u>
-#   Examples: dos_ip_443_t   dos_port_123_u
-#     - <ip|port>  -> per_ip or per_port mode
-#     - <port>     -> destination port (e.g., 443)
-#     - <t|u>      -> first letter of protocol (tcp/udp)
+#     dos[6]_<ip|port>_<port>_<t|u>
+#   Examples: dos_ip_443_t   dos6_port_123_u
+#     - 6           -> present for IPv6 logs
+#     - <ip|port>   -> threshold mode (per_ip or per_port)
+#     - <port>      -> destination port (e.g., 443)
+#     - <t|u>       -> first letter of protocol (tcp/udp)
 #
 # IMPORTANT:
 #   * Put per_ip rules before overlapping per_port rules so individual sources are
 #     throttled first and the per_port limiter acts only as a safety net.
+#   * For IPv6 rules, define them separately in DOS_PROT_V6_RULES; both follow the
+#     same syntax and semantics as IPv4.
 #
 # Reference for iptables hashlimit module options:
 # https://ipset.netfilter.org/iptables-extensions.man.html#lbAY
@@ -381,8 +448,11 @@ block:any:any:blk
 DOS_PROT_RULES='
 '
 
+DOS_PROT_V6_RULES='
+'
+
 ###################################################################################################
-# 7. Tunnel Director rules (ipset-based)
+# 7. Tunnel Director rules (ipset-based; IPv4-only)
 # -------------------------------------------------------------------------------------------------
 # One rule per line (blank lines are ignored; # comments are allowed).
 #
@@ -583,7 +653,7 @@ HTABLE_MAX=131072
 ###################################################################################################
 VSERVER_CHAIN='VSERVER'
 KILLSWITCH_CHAIN='VSERVER_KILLSWITCH'
-FILTERING_CHAIN='VSERVER_FILTERING'
+FILTERING_CHAIN='WAN_FILTERING'
 IPSET_CHAIN='IPSET_FILTERING'
 
 TUN_DIR_CHAIN_PREFIX='TUN_DIR_'
@@ -599,10 +669,10 @@ TUN_DIR_MARK_SHIFT=16
 readonly \
     IPS_BDR_DIR \
     MAXMIND_LICENSE_KEY \
-    CUSTOM_IPSETS \
-    KILLSWITCH_RULES \
-    WAN_FW_RULES \
-    DOS_PROT_RULES \
+    CUSTOM_IPSETS CUSTOM_V6_IPSETS \
+    KILLSWITCH_RULES KILLSWITCH_V6_RULES \
+    WAN_FW_RULES WAN_FW_V6_RULES \
+    DOS_PROT_RULES DOS_PROT_V6_RULES \
     TUN_DIR_RULES \
     MIN_BOOT_TIME BOOT_WAIT_DELAY \
     HTABLE_SIZE HTABLE_MAX \

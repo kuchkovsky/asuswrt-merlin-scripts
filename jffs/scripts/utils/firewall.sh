@@ -6,68 +6,71 @@
 # Public API
 # ----------
 #   validate_port <N>
-#         Validates a single destination port: integer between 1 and 65535 (inclusive).
-#         Returns 0 if valid, 1 otherwise.
+#       Validates a single destination port: integer between 1 and 65535 (inclusive).
+#       Returns 0 if valid, 1 otherwise.
 #
 #   validate_ports <spec>
-#         Validates a destination port spec: "any", single port (N), comma list (N,N2),
-#         dash range (N-M), or mixed list (e.g., 80,443,1000-2000).
-#         Returns 0 if valid, 1 otherwise.
+#       Validates a destination port spec: "any", single port (N), comma list (N,N2),
+#       dash range (N-M), or mixed list (e.g., 80,443,1000-2000).
+#       Returns 0 if valid, 1 otherwise.
 #
 #   normalize_protos <spec>
-#         Normalizes a protocol spec to one of the following: "tcp", "udp", or "tcp,udp".
-#         Accepts "any", "tcp", "udp", "tcp,udp", or "udp,tcp".
-#         Prints the canonical form and returns 0; non-zero on invalid input.
+#       Normalizes a protocol spec to one of: "tcp", "udp", or "tcp,udp".
+#       Accepts "any", "tcp", "udp", "tcp,udp", or "udp,tcp".
+#       Prints the canonical form and returns 0; non-zero on invalid input.
 #
-#   fw_chain_exists <table> <chain>
-#         Return 0 if the chain exists in the given table, 1 otherwise.
+#   fw_chain_exists [-6] <table> <chain>
+#       Return 0 if the chain exists in the given table (iptables/ip6tables), 1 otherwise.
 #
-#   create_fw_chain [-q] [-f] <table> <chain>
-#         Ensure a user-defined chain exists; with -f, flush it if already present.
-#         -q suppresses informational logs (errors still logged).
+#   create_fw_chain [-6] [-q] [-f] <table> <chain>
+#       Ensure a user-defined chain exists; with -f, flush it if already present.
+#       -6 uses ip6tables; -q suppresses informational logs (errors still logged).
 #
-#   delete_fw_chain [-q] <table> <chain>
-#         Flush and delete a user-defined chain if it exists.
-#         -q suppresses informational logs (errors still logged).
+#   delete_fw_chain [-6] [-q] <table> <chain>
+#       Flush and delete a user-defined chain if it exists.
+#       -6 uses ip6tables; -q suppresses informational logs (errors still logged).
 #
-#   find_fw_rules "<table> <chain>" "<grep -E pattern>"
-#         Print matching rules (from 'iptables -t <table> -S <chain>') to stdout,
-#         or print nothing if the chain is missing/no matches.
+#   find_fw_rules [-6] "<table> <chain>" "<grep -E pattern>"
+#       Print matching rules (from 'iptables -t <table> -S <chain>') to stdout,
+#       or print nothing if the chain is missing/no matches. -6 uses ip6tables.
 #
-#   purge_fw_rules [-q] [--count] "<table> <chain>" "<grep -E pattern>"
-#         Remove rules in the specified table/chain that match the regex.
-#         With --count, print the number of deleted rules (integer) to stdout.
-#         -q suppresses informational logs (errors still logged).
+#   purge_fw_rules [-6] [-q] [--count] "<table> <chain>" "<grep -E pattern>"
+#       Remove rules in the specified table/chain that match the regex.
+#       With --count, print the number of deleted rules (integer) to stdout.
+#       -6 uses ip6tables; -q suppresses informational logs (errors still logged).
 #
-#   ensure_fw_rule [-q] [--count] <table> <chain> [-I [pos] | -D] <rule...>
-#         Idempotent helper:
-#           *  no flag    -> append rule (-A) if it's missing
-#           *  -I [pos]   -> insert rule (-I) at position (default 1) if missing
-#           *  -D         -> delete rule (-D) if it exists
-#         Guarantees the rule appears exactly once (or not at all, for -D).
-#         With --count, print 1 to stdout on change (insert/append/delete), else 0.
-#         -q suppresses informational logs (errors still logged).
+#   ensure_fw_rule [-6] [-q] [--count] <table> <chain> [-I [pos] | -D] <rule...>
+#       Idempotent helper (iptables/ip6tables):
+#         *  no flag    -> append rule (-A) if it's missing
+#         *  -I [pos]   -> insert rule (-I) at position (default 1) if missing
+#         *  -D         -> delete rule (-D) if it exists
+#       Guarantees the rule appears exactly once (or not at all, for -D).
+#       With --count, print 1 to stdout on change (insert/append/delete), else 0.
+#       -6 uses ip6tables; -q suppresses informational logs (errors still logged).
 #
-#   sync_fw_rule [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]
-#         Replace all rules matching <pattern> with a single desired rule (append by default
-#         or insert at [insert_pos]). No change if exactly one match equals the desired rule.
-#         With --count, print the number of changes (deleted + inserted) to stdout.
-#         -q suppresses informational logs (errors still logged).
+#   sync_fw_rule [-6] [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]
+#       Replace all rules matching <pattern> with a single desired rule (append by default
+#       or insert at [insert_pos]). No change if exactly one match equals the desired rule.
+#       With --count, print the number of changes (deleted + inserted) to stdout.
+#       -6 uses ip6tables; -q suppresses informational logs (errors still logged).
 #
 #   block_wan_for_host <hostname|ip> [wan_id]
-#         Resolve host to LAN IP and add filter/FORWARD REJECT/DROP rules to block both
-#         outbound-to and inbound-from the specified WAN (default wan1).
+#       Resolve host to a LAN IPv4 and (if IPv6 is enabled) to all global IPv6.
+#       Add filter/FORWARD REJECT/DROP rules to block both outbound-to and inbound-from
+#       the specified WAN. Defaults to wan_id=0.
 #
 #   allow_wan_for_host <hostname|ip> [wan_id]
-#         Resolve host to LAN IP and remove the corresponding REJECT/DROP rules, restoring access.
+#       Resolve host to a LAN IPv4 and (if IPv6 is enabled) to all global IPv6.
+#       Remove the corresponding REJECT/DROP rules, restoring access. Defaults to wan_id=0.
 #
 #   chg <command ...>
-#         Runs a command and returns success (0) if its stdout is a non-zero
-#         integer; useful with --count helpers to test whether anything changed.
+#       Runs a command and returns success (0) if its stdout is a non-zero integer;
+#       useful with --count helpers to test whether anything changed.
 #
 # Notes
 # -----
 #   * This library expects common.sh to be sourced first.
+#   * Use -6 in functions to select IPv6 (where applicable).
 ###################################################################################################
 
 # -------------------------------------------------------------------------------------------------
@@ -200,6 +203,11 @@ validate_ports() {
     [ -z "$p" ] && return 1
     [ "$p" = "any" ] && return 0
 
+    # Reject leading/trailing or consecutive commas
+    case "$p" in
+        ,*|*,|*,,*) return 1 ;;
+    esac
+
     IFS_SAVE=$IFS
     IFS=','; set -- $p; IFS=$IFS_SAVE
 
@@ -264,9 +272,10 @@ normalize_protos() {
 # fw_chain_exists - check if an iptables chain exists in a given table
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   fw_chain_exists <table> <chain>
+#   fw_chain_exists [-6] <table> <chain>
 #
 # Args:
+#   -6        : OPTIONAL; check in ip6tables instead of iptables
 #   <table>   : iptables table (e.g., raw | nat | filter | mangle)
 #   <chain>   : chain name to verify
 #
@@ -275,8 +284,34 @@ normalize_protos() {
 #   * 1 (failure) if the chain does not exist or error occurs
 ###################################################################################################
 fw_chain_exists() {
-    local table="$1" chain="$2"
-    iptables -t "$table" -nL "$chain" >/dev/null 2>&1
+    local cmd="iptables" table="" chain=""
+
+    # Parse flags
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -6) cmd="ip6tables" ;;
+            --) shift; break ;;
+            -*) log -l err "fw_chain_exists: unknown option: $1"; return 1 ;;
+            *)
+                if [ -z "$table" ]; then
+                    table="$1"
+                elif [ -z "$chain" ]; then
+                    chain="$1"
+                else
+                    log -l err "fw_chain_exists: usage: fw_chain_exists [-6] <table> <chain>"
+                    return 1
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$table" ] || [ -z "$chain" ]; then
+        log -l err "fw_chain_exists: usage: fw_chain_exists [-6] <table> <chain>"
+        return 1
+    fi
+
+    "$cmd" -t "$table" -S "$chain" >/dev/null 2>&1
 }
 
 ###################################################################################################
@@ -284,8 +319,10 @@ fw_chain_exists() {
 # -------------------------------------------------------------------------------------------------
 # Usage:
 #   create_fw_chain [-q] [-f] <table> <chain>
+#   create_fw_chain -6 [-q] [-f] <table> <chain>
 #
 # Args:
+#   -6        : OPTIONAL; use ip6tables instead of iptables
 #   -q        : OPTIONAL; suppress informational logs (errors still logged)
 #   -f        : OPTIONAL; if the chain already exists, flush its contents
 #   <table>   : iptables table (raw | nat | filter | mangle)
@@ -299,12 +336,13 @@ fw_chain_exists() {
 #   * On error: returns 1
 ###################################################################################################
 create_fw_chain() {
-    local quiet=0 flush=0
+    local cmd="iptables" fam_label="IPv4" quiet=0 flush=0
     local table chain
 
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
+            -6) cmd="ip6tables"; fam_label="IPv6"; shift ;;
             -q) quiet=1; shift ;;
             -f) flush=1; shift ;;
             --) shift; break ;;
@@ -322,34 +360,34 @@ create_fw_chain() {
 
     if [ -z "$table" ] || [ -z "$chain" ]; then
         log -l err "create_fw_chain: usage:" \
-            "create_fw_chain [-q] [-f] <table> <chain>"
+            "create_fw_chain [-6] [-q] [-f] <table> <chain>"
         return 1
     fi
 
     shift 2 || true
 
     # Chain exists?
-    if iptables -t "$table" -S "$chain" >/dev/null 2>&1; then
+    if "$cmd" -t "$table" -S "$chain" >/dev/null 2>&1; then
         if [ "$flush" -eq 1 ]; then
-            if iptables -t "$table" -F "$chain" 2>/dev/null; then
-                _qlog "Flushed existing chain: table=$table chain=$chain"
+            if "$cmd" -t "$table" -F "$chain" 2>/dev/null; then
+                _qlog "Flushed existing chain ($fam_label): table=$table chain=$chain"
                 return 0
             else
-                log -l err "Failed to flush chain: $table -> $chain"
+                log -l err "Failed to flush chain ($fam_label): table=$table chain=$chain"
                 return 1
             fi
         fi
         # Exists and no flush requested -> no-op
-        _qlog "Chain already exists: table=$table chain=$chain"
+        _qlog "Chain already exists ($fam_label): table=$table chain=$chain"
         return 0
     fi
 
     # Create new chain
-    if iptables -t "$table" -N "$chain" 2>/dev/null; then
-        _qlog "Created new chain: table=$table chain=$chain"
+    if "$cmd" -t "$table" -N "$chain" 2>/dev/null; then
+        _qlog "Created new chain ($fam_label): table=$table chain=$chain"
         return 0
     else
-        log -l err "Failed to create chain: table=$table chain=$chain"
+        log -l err "Failed to create chain ($fam_label): table=$table chain=$chain"
         return 1
     fi
 }
@@ -359,8 +397,10 @@ create_fw_chain() {
 # -------------------------------------------------------------------------------------------------
 # Usage:
 #   delete_fw_chain [-q] <table> <chain>
+#   delete_fw_chain -6 [-q] <table> <chain>
 #
 # Args:
+#   -6      : OPTIONAL; use ip6tables instead of iptables
 #   -q      : OPTIONAL; suppress informational logs (errors still logged)
 #   <table> : iptables table (raw | nat | filter | mangle)
 #   <chain> : user-defined chain to delete (no effect for built-ins)
@@ -371,13 +411,16 @@ create_fw_chain() {
 #   * Returns 0 on success, 1 on failure.
 ###################################################################################################
 delete_fw_chain() {
-    local quiet=0
+    local cmd="iptables" fam_label="IPv4" quiet=0
 
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
+            -6) cmd="ip6tables"; fam_label="IPv6"; shift ;;
             -q) quiet=1; shift ;;
-            *) break ;;
+            --) shift; break ;;
+            -*) log -l err "delete_fw_chain: unknown option: $1"; return 1 ;;
+            *)  break ;;
         esac
     done
 
@@ -387,28 +430,27 @@ delete_fw_chain() {
     local table="${1-}" chain="${2-}"
 
     if [ -z "$table" ] || [ -z "$chain" ]; then
-        log -l err "delete_fw_chain: usage: delete_fw_chain <table> <chain>"
+        log -l err "delete_fw_chain: usage: delete_fw_chain [-6] [-q] <table> <chain>"
         return 1
     fi
 
     # Chain present?
-    if ! iptables -t "$table" -S "$chain" >/dev/null 2>&1; then
-        _qlog "Chain not present: $table -> $chain (nothing to delete)"
+    if ! "$cmd" -t "$table" -S "$chain" >/dev/null 2>&1; then
+        _qlog "Chain not present ($fam_label): $table -> $chain (nothing to delete)"
         return 0
     fi
 
-    # Flush
-    iptables -t "$table" -F "$chain" 2>/dev/null || true
-    _qlog "Flushed chain: table=$table chain=$chain"
+    # Flush (ignore errors)
+    "$cmd" -t "$table" -F "$chain" 2>/dev/null || true
+    _qlog "Flushed chain ($fam_label): table=$table chain=$chain"
 
     # Delete
-    if ! iptables -t "$table" -X "$chain" 2>/dev/null; then
-        log -l err "Failed to delete chain $table -> $chain"
+    if ! "$cmd" -t "$table" -X "$chain" 2>/dev/null; then
+        log -l err "Failed to delete chain ($fam_label): $table -> $chain"
         return 1
     fi
 
-    _qlog "Deleted chain: table=$table chain=$chain"
-
+    _qlog "Deleted chain ($fam_label): table=$table chain=$chain"
     return 0
 }
 
@@ -416,9 +458,10 @@ delete_fw_chain() {
 # find_fw_rules - list rules in a table/chain that match a regex
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   find_fw_rules "<table> <chain>" "<grep -E pattern>"
+#   find_fw_rules [-6] "<table> <chain>" "<grep -E pattern>"
 #
 # Args:
+#   -6               : OPTIONAL; use ip6tables instead of iptables
 #   <table> <chain>  : e.g., "raw PREROUTING", "nat PREROUTING", "nat WGC1_VSERVER"
 #   <pattern>        : extended regex tested against 'iptables -t <table> -S <chain>' lines
 #
@@ -428,7 +471,20 @@ delete_fw_chain() {
 #   * Returns 1 on misuse (bad args).
 ###################################################################################################
 find_fw_rules() {
-    local base="$1" pattern="$2" table chain
+    local cmd="iptables" base="" pattern="" table chain out
+
+    # Parse flags
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -6) cmd="ip6tables"; shift ;;
+            --) shift; break ;;
+            -*) log -l err "find_fw_rules: unknown option: $1"; return 1 ;;
+            *)  break ;;
+        esac
+    done
+
+    base="${1-}"
+    pattern="${2-}"
 
     if [ -z "$base" ] || [ -z "$pattern" ]; then
         log -l err "find_fw_rules: usage:" \
@@ -445,21 +501,20 @@ find_fw_rules() {
         return 1
     fi
 
-    # Chain may not exist; treat as empty result
-    if ! iptables -t "$table" -S "$chain" >/dev/null 2>&1; then
-        return 0
-    fi
+    # Get rules (chain may not exist; treat as empty)
+    out="$("$cmd" -t "$table" -S "$chain" 2>/dev/null)" || return 0
 
-    iptables -t "$table" -S "$chain" 2>/dev/null | grep -E -- "$pattern" || true
+    printf '%s\n' "$out" | grep -E -- "$pattern" || true
 }
 
 ###################################################################################################
 # purge_fw_rules - remove matching rules from a table/chain
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   purge_fw_rules [-q] [--count] "<table> <chain>" "<grep -E pattern>"
+#   purge_fw_rules [-6] [-q] [--count] "<table> <chain>" "<grep -E pattern>"
 #
 # Args:
+#   -6               : OPTIONAL; use ip6tables instead of iptables
 #   -q               : OPTIONAL; suppress informational logs (errors still logged)
 #   --count          : OPTIONAL; print number of deleted rules (integer) to stdout
 #   "<table> <chain>": space-separated pair, e.g., "raw PREROUTING", "nat WGC1_VSERVER"
@@ -473,14 +528,16 @@ find_fw_rules() {
 #   * Returns 0 on success; 1 only on misuse.
 ###################################################################################################
 purge_fw_rules() {
-    local quiet=0 print_count=0
+    local cmd="iptables" fam_label="IPv4" quiet=0 print_count=0
 
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
+            -6)       cmd="ip6tables"; fam_label="IPv6"; shift ;;
             -q)       quiet=1; shift ;;
             --count)  print_count=1; shift ;;
             --)       shift; break ;;
+            -*)       log -l err "purge_fw_rules: unknown option: $1"; return 1 ;;
             *)        break ;;
         esac
     done
@@ -488,12 +545,12 @@ purge_fw_rules() {
     # Helper to conditionally log info
     _qlog() { [ "$quiet" -eq 1 ] || log "$@"; }
 
-    local base="${1-}" pattern="${2-}" table chain rules
+    local base="${1-}" pattern="${2-}" table chain rules rest
     local cnt=0
 
     if [ -z "$base" ] || [ -z "$pattern" ]; then
         log -l err "purge_fw_rules: usage:" \
-            "purge_fw_rules [-q] \"<table> <chain>\" \"<pattern>\""
+            "purge_fw_rules [-6] [-q] [--count] \"<table> <chain>\" \"<pattern>\""
         return 1
     fi
 
@@ -501,12 +558,16 @@ purge_fw_rules() {
     chain=${base#* }
 
     # Chain may not exist; no-op
-    if ! iptables -t "$table" -S "$chain" >/dev/null 2>&1; then
+    if ! "$cmd" -t "$table" -S "$chain" >/dev/null 2>&1; then
         [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
         return 0
     fi
 
-    rules="$(find_fw_rules "$base" "$pattern")"
+    # Build args for find_fw_rules
+    set -- "$base" "$pattern"
+    [ "$cmd" = ip6tables ] && set -- -6 "$@"
+    rules="$(find_fw_rules "$@")"
+
     if [ -z "$rules" ]; then
         [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
         return 0
@@ -519,18 +580,18 @@ purge_fw_rules() {
         eval "set -- $rest"           # re-tokenize respecting original quoting
         set +f
 
-        if iptables -t "$table" -D "$@" 2>/dev/null; then
+        if "$cmd" -t "$table" -D "$@" 2>/dev/null; then
             cnt=$((cnt+1))
-            _qlog "Deleted rule: table=$table chain=$chain $(_spec_to_log "$rest")"
+            _qlog "Deleted rule ($fam_label):" \
+                "table=$table chain=$chain $(_spec_to_log "$rest")"
         else
-            log -l err "Failed to remove firewall rule: $table $rule"
+            log -l err "Failed to remove firewall rule ($fam_label): $table $rule"
         fi
     done <<EOF
 $rules
 EOF
 
     [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
-
     return 0
 }
 
@@ -538,9 +599,10 @@ EOF
 # ensure_fw_rule - idempotent iptables rule helper with optional logging/count
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   ensure_fw_rule [-q] [--count] <table> <chain> [-I [pos] | -D] <rule...>
+#   ensure_fw_rule [-6] [-q] [--count] <table> <chain> [-I [pos] | -D] <rule...>
 #
 # Args:
+#   -6         : OPTIONAL; use ip6tables instead of iptables
 #   -q         : OPTIONAL; suppress informational logs (errors still logged)
 #   --count    : OPTIONAL; on change (insert/append/delete) print "1", else "0" to stdout
 #   <table>    : iptables table
@@ -555,12 +617,14 @@ EOF
 #   * Returns 0 on success; 1 on insertion/append/delete failure or misuse.
 ###################################################################################################
 ensure_fw_rule() {
+    local cmd="iptables" fam_label="IPv4"
     local mode="-A" pos=""
     local quiet=0 print_count=0 cnt=0
 
     # Parse flags
     while :; do
         case "${1-}" in
+            -6)       cmd="ip6tables"; fam_label="IPv6"; shift ;;
             -q)       quiet=1; shift ;;
             --count)  print_count=1; shift ;;
             *)        break ;;
@@ -569,7 +633,7 @@ ensure_fw_rule() {
 
     local table="${1-}" chain="${2-}"
     if [ -z "$table" ] || [ -z "$chain" ]; then
-        log -l err "ensure_fw_rule: usage: ensure_fw_rule [-q] [--count]" \
+        log -l err "ensure_fw_rule: usage: ensure_fw_rule [-6] [-q] [--count]" \
             "<table> <chain> [-I [pos] | -D] <rule...>"
         return 1
     fi
@@ -579,36 +643,36 @@ ensure_fw_rule() {
         -I)
             mode="-I"; shift
             if [ -n "${1-}" ] && [ "$1" -eq "$1" ] 2>/dev/null; then
-              pos="$1"; shift
+                pos="$1"; shift
             else
-              pos=1
+                pos=1
             fi
             ;;
         -D)
-            mode="-D"; shift
-          ;;
+            mode="-D"; shift ;;
     esac
 
     # Helper to conditionally log info
     _qlog() { [ "$quiet" -eq 1 ] || log "$@"; }
 
     # Existence check (position is irrelevant so we test without it)
-    if iptables -t "$table" -C "$chain" "$@" 2>/dev/null; then
+    if "$cmd" -t "$table" -C "$chain" "$@" 2>/dev/null; then
         if [ "$mode" = "-D" ]; then
-            if iptables -t "$table" -D "$chain" "$@" 2>/dev/null; then
+            if "$cmd" -t "$table" -D "$chain" "$@" 2>/dev/null; then
                 cnt=$((cnt+1))
-                _qlog "Deleted rule: table=$table chain=$chain $(_spec_to_log "$@")"
+                _qlog "Deleted rule ($fam_label):" \
+                    "table=$table chain=$chain $(_spec_to_log "$@")"
                 [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
                 return 0
             else
-                log -l err "Failed to delete rule:" \
+                log -l err "Failed to delete rule ($fam_label):" \
                     "table=$table chain=$chain $(_spec_to_log "$@")"
                 return 1
             fi
         fi
         # Rule already present; no action.
-        _qlog "Rule is already present: table=$table chain=$chain $(_spec_to_log "$@")"
-
+        _qlog "Rule is already present ($fam_label):" \
+            "table=$table chain=$chain $(_spec_to_log "$@")"
         [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
         return 0
     fi
@@ -621,28 +685,28 @@ ensure_fw_rule() {
 
     # Rule not present -> add it
     if [ "$mode" = "-I" ]; then
-        if iptables -t "$table" -I "$chain" "$pos" "$@" 2>/dev/null; then
+        if "$cmd" -t "$table" -I "$chain" "$pos" "$@" 2>/dev/null; then
             cnt=$((cnt+1))
-            _qlog "Inserted rule at ins_pos=#$pos:" \
+            _qlog "Inserted rule at ins_pos=#$pos ($fam_label):" \
                 "table=$table chain=$chain $(_spec_to_log "$@")"
         else
-            log -l err "Failed to insert rule at ins_pos=#$pos:" \
+            log -l err "Failed to insert rule at ins_pos=#$pos ($fam_label):" \
                 "table=$table chain=$chain $(_spec_to_log "$@")"
             return 1
         fi
     else
-        if iptables -t "$table" -A "$chain" "$@" 2>/dev/null; then
+        if "$cmd" -t "$table" -A "$chain" "$@" 2>/dev/null; then
             cnt=$((cnt+1))
-            _qlog "Appended rule: table=$table chain=$chain $(_spec_to_log "$@")"
+            _qlog "Appended rule ($fam_label):" \
+                "table=$table chain=$chain $(_spec_to_log "$@")"
         else
-            log -l err "Failed to append rule:" \
+            log -l err "Failed to append rule ($fam_label):" \
                 "table=$table chain=$chain $(_spec_to_log "$@")"
             return 1
         fi
     fi
 
     [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
-
     return 0
 }
 
@@ -650,9 +714,10 @@ ensure_fw_rule() {
 # sync_fw_rule - replace matching rules with one desired rule (idempotent)
 # -------------------------------------------------------------------------------------------------
 # Usage:
-#   sync_fw_rule [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]
+#   sync_fw_rule [-6] [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]
 #
 # Args:
+#   -6            : OPTIONAL; use ip6tables instead of iptables
 #   -q            : OPTIONAL; suppress informational logs (errors still logged)
 #   --count       : OPTIONAL; print number of changes (purged + inserted) to stdout
 #   <table>       : iptables table
@@ -667,11 +732,12 @@ ensure_fw_rule() {
 #   * Returns 0 on success; 1 on misuse.
 ###################################################################################################
 sync_fw_rule() {
-    local quiet=0 print_count=0
+    local cmd="iptables" fam_label="IPv4" quiet=0 print_count=0
 
     # Parse flags
     while [ $# -gt 0 ]; do
         case "$1" in
+            -6)       cmd="ip6tables"; fam_label="IPv6"; shift ;;
             -q)       quiet=1; shift ;;
             --count)  print_count=1; shift ;;
             --)       shift; break ;;
@@ -683,48 +749,79 @@ sync_fw_rule() {
     _qlog() { [ "$quiet" -eq 1 ] || log "$@"; }
 
     local table="${1-}" chain="${2-}" pattern="${3-}" desired="${4-}" ins_pos="${5-}"
-    local matches expected line_count desired_count desired_log qopt="" copt=""
+    local matches expected line_count desired_count curr_pos
     local cnt=0 n=0
 
     if [ -z "$table" ] || [ -z "$chain" ] || [ -z "$pattern" ] || [ -z "$desired" ]; then
-        log -l err "sync_fw_rule: usage: sync_fw_rule [-q] <table> <chain>" \
+        log -l err "sync_fw_rule: usage: sync_fw_rule [-6] [-q] [--count] <table> <chain>" \
             "\"<pattern>\" \"<desired args>\" [insert_pos]"
         return 1
     fi
 
-    [ "$quiet" -eq 1 ] && qopt="-q"
-    [ "$print_count" -eq 1 ] && copt="--count"
-    desired_log="$(_spec_to_log "$desired")"
+    # Build expected iptables-save-style line
     expected="-A $chain $desired"
+    desired_log="$(_spec_to_log "$desired")"
 
-    # Find current matches
-    matches="$(find_fw_rules "$table $chain" "$pattern" || true)"
+    # Find current matches (avoid SC2046: build argv then quote once)
+    set -- "$table $chain" "$pattern"
+    [ "$cmd" = ip6tables ] && set -- -6 "$@"
+    matches="$(find_fw_rules "$@")"
 
     if [ -n "$matches" ]; then
         line_count="$(printf '%s' "$matches" | grep -c '^' || true)"
         desired_count="$(printf '%s' "$matches" | grep -Fxc -- "$expected" || true)"
 
         if [ "$line_count" -eq 1 ] && [ "$desired_count" -eq 1 ]; then
-            # Already exactly what we want
-            _qlog "Rule is already present: table=$table chain=$chain $desired_log"
-            [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
-            return 0
+            # Exactly one match and it equals the desired spec
+            if [ -n "$ins_pos" ]; then
+                # Verify actual rule position among -A entries
+                # without passing quoted text via -v to awk
+                curr_pos="$(
+                    "$cmd" -t "$table" -S "$chain" 2>/dev/null \
+                    | awk '$1 == "-A" { i++ } { print i "\t" $0 }' \
+                    | grep -F -- "$expected" | head -n1 | awk -F'\t' '{ print $1 }'
+                )"
+                if [ -n "$curr_pos" ] && [ "$curr_pos" -eq "$ins_pos" ] 2>/dev/null; then
+                    _qlog "Rule already present at correct position ($fam_label):" \
+                        "table=$table chain=$chain pos=$curr_pos $desired_log"
+                    [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
+                    return 0
+                fi
+                # Position differs -> fall through to purge & re-insert
+            else
+                _qlog "Rule is already present ($fam_label):" \
+                    "table=$table chain=$chain $desired_log"
+                [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
+                return 0
+            fi
         fi
 
-        n=$(purge_fw_rules $qopt $copt "$table $chain" "$pattern")
+        # Purge all matches (build argv to avoid word-splitting issues)
+        set --
+        [ "$cmd" = ip6tables ] && set -- "$@" -6
+        [ "$quiet" -eq 1 ] && set -- "$@" -q
+        [ "$print_count" -eq 1 ] && set -- "$@" --count
+        set -- "$@" "$table $chain" "$pattern"
+        n="$(purge_fw_rules "$@")"
         cnt=$((cnt+n))
     fi
 
+    # Ensure desired rule (append or insert)
+    local v6_flag="" q_flag="" cmdargs
+    [ "$cmd" = ip6tables ] && v6_flag="-6 "
+    [ "$quiet" -eq 1 ] && q_flag="-q "
+    cmdargs="${v6_flag}${q_flag}--count \"$table\" \"$chain\""
     if [ -n "$ins_pos" ]; then
-        n=$(ensure_fw_rule $qopt $copt "$table" "$chain" -I "$ins_pos" $desired)
-        cnt=$((cnt+n))
-    else
-        n=$(ensure_fw_rule $qopt $copt "$table" "$chain" $desired)
-        cnt=$((cnt+n))
+        cmdargs="$cmdargs -I \"$ins_pos\""
     fi
+
+    set -f
+    eval "set -- $cmdargs $desired"
+    set +f
+    n="$(ensure_fw_rule "$@")" || n=0
+    cnt=$((cnt + ${n:-0}))
 
     [ "$print_count" -eq 1 ] && printf '%s\n' "$cnt"
-
     return 0
 }
 
@@ -733,38 +830,77 @@ sync_fw_rule() {
 # -------------------------------------------------------------------------------------------------
 # Usage:
 #   block_wan_for_host <hostname|ip> [wan_id]
-#     - wan_id: ASUS WAN index (0 = primary, 1 = secondary). Defaults to 1.
+#     - wan_id: ASUS WAN index (0 = primary, 1 = secondary). Defaults to 0.
 #
 # Behavior:
-#   * Resolves the device to its LAN IP.
-#   * Reads the egress interface for the given WAN.
-#   * Inserts REJECT/DROP rules at the top of the filter chain to block traffic
-#     both from the device's IP to the given WAN and from the given WAN
-#     back to the device's IP.
-#   * Logs the action (host, resolved IP, interface).
-#   * Fails gracefully (logs and returns 1) if resolution fails or the WAN
-#     interface name is empty.
+#   * Tries to resolve a single LAN IPv4 (RFC1918). If present, blocks it.
+#   * If IPv6 is enabled, resolves all global IPv6 for the host and blocks each
+#     (ULAs / link-local are ignored).
+#   * Inserts rules at the top of filter / FORWARD:
+#       - WAN -> host:  DROP
+#       - host -> WAN:  REJECT (icmp-admin-prohibited / icmp6-adm-prohibited)
+#   * Succeeds if at least one address family was blocked.
+#   * Fails (returns 1) only if neither IPv4 LAN nor global IPv6 could be resolved,
+#     or if the WAN interface name is empty.
 ###################################################################################################
 block_wan_for_host() {
-    local host="$1" wan_id="${2:-1}" host_ip wan_if
+    local host="$1" wan_id="${2:-0}"
+    local host_ip4="" wan_if v6_list="" ip6
+    local any_blocked=0
 
-    host_ip=$(resolve_lan_ip "$host") || return 1
+    # WAN interface
     wan_if="$(nvram get wan${wan_id}_ifname)"
-
     if [ -z "$wan_if" ]; then
         log -l err "wan${wan_id} interface name is empty; cannot block WAN for host"
         return 1
     fi
 
-    # Block inbound traffic to the host from WAN
-    ensure_fw_rule filter FORWARD -I 1 -i "$wan_if" -d "$host_ip" -j DROP
+    # IPv4: try to resolve a single LAN IPv4; skip silently if none
+    host_ip4="$(resolve_lan_ip -q "$host" || true)"
+    if [ -n "$host_ip4" ]; then
+        # WAN -> host: DROP
+        ensure_fw_rule filter FORWARD -I 1 -i "$wan_if" -d "$host_ip4" -j DROP
+        # host -> WAN: REJECT (admin prohibited)
+        ensure_fw_rule filter FORWARD -I 2 -s "$host_ip4" -o "$wan_if" \
+            -j REJECT --reject-with icmp-admin-prohibited
+        any_blocked=1
+    fi
 
-    # Block outbound traffic from the host to WAN
-    ensure_fw_rule filter FORWARD -I 2 -s "$host_ip" -o "$wan_if" \
-        -j REJECT --reject-with icmp-admin-prohibited
+    # IPv6: only if enabled; block all global v6 addresses (ignore ULA / link-local)
+    if [ "$(get_ipv6_enabled)" -eq 1 ]; then
+        v6_list="$(resolve_ip -6 -q -g -a "$host" || true)"
+        if [ -n "$v6_list" ]; then
+            while IFS= read -r ip6; do
+                [ -n "$ip6" ] || continue
+                # WAN -> host-v6: DROP
+                ensure_fw_rule -6 filter FORWARD -I 1 -i "$wan_if" -d "$ip6" -j DROP
+                # host-v6 -> WAN: REJECT
+                ensure_fw_rule -6 filter FORWARD -I 2 -s "$ip6" -o "$wan_if" \
+                    -j REJECT --reject-with icmp6-adm-prohibited
+                any_blocked=1
+            done <<EOF
+$v6_list
+EOF
+        fi
+    fi
 
-    log "Blocked WAN access for host=$host (ip=$host_ip)" \
-        "on iface=$wan_if (wan_id=$wan_id)"
+    # If nothing was blocked at all, fail gracefully
+    if [ "$any_blocked" -eq 0 ]; then
+        log -l err "No IPv4 LAN or global IPv6 found for '$host'; nothing to block"
+        return 1
+    fi
+
+    # Log summary
+    if [ -n "$host_ip4" ] && [ -n "$v6_list" ]; then
+        log "Blocked WAN for host=$host (ipv4=$host_ip4" \
+            "ipv6_global=$(printf '%s' "$v6_list" | tr '\n' ' '))" \
+            "on iface=$wan_if (wan_id=$wan_id)"
+    elif [ -n "$host_ip4" ]; then
+        log "Blocked WAN for host=$host (ipv4=$host_ip4) on iface=$wan_if (wan_id=$wan_id)"
+    else
+        log "Blocked WAN for host=$host (ipv6_global=$(printf '%s' "$v6_list" | tr '\n' ' '))" \
+            "on iface=$wan_if (wan_id=$wan_id)"
+    fi
 }
 
 ###################################################################################################
@@ -772,34 +908,70 @@ block_wan_for_host() {
 # -------------------------------------------------------------------------------------------------
 # Usage:
 #   allow_wan_for_host <hostname|ip> [wan_id]
-#     - wan_id: ASUS WAN index (0 = primary, 1 = secondary). Defaults to 1.
+#     - wan_id: ASUS WAN index (0 = primary, 1 = secondary). Defaults to 0.
 #
 # Behavior:
-#   * Resolves the device to its LAN IP.
-#   * Reads the egress interface for the given WAN.
-#   * Deletes the REJECT/DROP rules from filter FORWARD (if present).
-#   * Logs the action (host, resolved IP, interface).
-#   * Fails gracefully (logs and returns 1) if resolution fails or the WAN
-#     interface name is empty.
+#   * Tries to resolve a single LAN IPv4; if present, removes IPv4 DROP/REJECT rules.
+#   * If IPv6 is enabled, resolves all global IPv6 for the host and removes the
+#     corresponding ip6tables rules as well (ULAs / link-local are ignored).
+#   * Succeeds if at least one address family was processed.
+#   * Fails (returns 1) only if neither IPv4 LAN nor global IPv6 could be resolved,
+#     or if the WAN interface name is empty.
 ###################################################################################################
 allow_wan_for_host() {
-    local host="$1" wan_id="${2:-1}" host_ip wan_if
+    local host="$1" wan_id="${2:-0}"
+    local host_ip4="" wan_if v6_list="" ip6
+    local any_processed=0
 
-    host_ip=$(resolve_lan_ip "$host") || return 1
+    # WAN interface
     wan_if="$(nvram get wan${wan_id}_ifname)"
-
     if [ -z "$wan_if" ]; then
         log -l err "wan${wan_id} interface name is empty; cannot unblock WAN for host"
         return 1
     fi
 
-    # Remove both directions if present
-    ensure_fw_rule filter FORWARD -D -i "$wan_if" -d "$host_ip" -j DROP
-    ensure_fw_rule filter FORWARD -D -s "$host_ip" -o "$wan_if" \
-        -j REJECT --reject-with icmp-admin-prohibited
+    # IPv4: try to resolve a single LAN IPv4; skip silently if none
+    host_ip4="$(resolve_lan_ip -q "$host" || true)"
+    if [ -n "$host_ip4" ]; then
+        ensure_fw_rule filter FORWARD -D -i "$wan_if" -d "$host_ip4" -j DROP
+        ensure_fw_rule filter FORWARD -D -s "$host_ip4" -o "$wan_if" \
+            -j REJECT --reject-with icmp-admin-prohibited
+        any_processed=1
+    fi
 
-    log "Allowed WAN access for host=$host (ip=$host_ip)" \
-        "on iface=$wan_if (wan_id=$wan_id)"
+    # IPv6: only if enabled; remove rules for all global v6 addresses (ignore ULA / link-local)
+    if [ "$(get_ipv6_enabled)" -eq 1 ]; then
+        v6_list="$(resolve_ip -6 -q -g -a "$host" || true)"
+        if [ -n "$v6_list" ]; then
+            while IFS= read -r ip6; do
+                [ -n "$ip6" ] || continue
+                ensure_fw_rule -6 filter FORWARD -D -i "$wan_if" -d "$ip6" -j DROP
+                ensure_fw_rule -6 filter FORWARD -D -s "$ip6" -o "$wan_if" \
+                    -j REJECT --reject-with icmp6-adm-prohibited
+                any_processed=1
+            done <<EOF
+$v6_list
+EOF
+        fi
+    fi
+
+    # If nothing was processed at all, fail gracefully
+    if [ "$any_processed" -eq 0 ]; then
+        log -l err "No IPv4 LAN or global IPv6 found for '$host'; nothing to allow"
+        return 1
+    fi
+
+    # Log summary
+    if [ -n "$host_ip4" ] && [ -n "$v6_list" ]; then
+        log "Allowed WAN for host=$host (ipv4=$host_ip4" \
+            "ipv6_global=$(printf '%s' "$v6_list" | tr '\n' ' '))" \
+            "on iface=$wan_if (wan_id=$wan_id)"
+    elif [ -n "$host_ip4" ]; then
+        log "Allowed WAN for host=$host (ipv4=$host_ip4) on iface=$wan_if (wan_id=$wan_id)"
+    else
+        log "Allowed WAN for host=$host (ipv6_global=$(printf '%s' "$v6_list" | tr '\n' ' '))" \
+            "on iface=$wan_if (wan_id=$wan_id)"
+    fi
 }
 
 ###################################################################################################

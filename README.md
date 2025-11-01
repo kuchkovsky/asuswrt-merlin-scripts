@@ -2,7 +2,7 @@
 
 A set of shell scripts that extend the functionality of routers running **[Asuswrt-Merlin](https://www.asuswrt-merlin.net/)**.
 Each script lives in `/jffs/scripts` and integrates with Merlin's built-in hook system
-(`services-start`, `nat-start`, `wgclient-start`, etc.).
+(`services-start`, `firewall-start`, `wgclient-start`, etc.).
 
 > **Firmware requirement**: these scripts depend on Merlin's custom script framework and
   will **not** run on stock ASUS firmware.
@@ -11,15 +11,18 @@ Each script lives in `/jffs/scripts` and integrates with Merlin's built-in hook 
 ## General Information & Disclaimers
 
 * Scripts are provided **as-is**; review the code before deployment.
-* The code and configuration files are extensively commented - *read them carefully* to understand
-  how each script works and how to adapt it to your environment. In most cases, you'll find all the
-  details you need directly inside the script headers or `config.sh`.
+* Deployment is straightforward: always upload the `scripts/utils` folder (it contains the
+  shared libraries) and the files mentioned in the section of the script you want to deploy
+  (e.g., `scripts/services-start`, `scripts/firewall/ipset_builder.sh`). Edit the configs
+  locally before uploading them.
+* The code and configuration files are extensively commented - it's recommended to review them
+  to understand how each component works and how to adapt it to your environment. In most cases,
+  you'll find all the details you need directly inside the script headers or in `config.sh`.
 * Adjust IPs, subnets, filesystem labels, and USB vendor IDs to match your own setup. If you remove
   a script you don't use, also delete any references to it in related hook or event-handler files.
 * **`send_email.sh`** (used by WAN failover, startup notifications, and ipset builder retry alerts)
   requires that email is preconfigured in **`amtm`** before running these scripts.
-* Network-related scripts are IPv4-only since my ISP doesn't support IPv6 yet.
-  I'll add IPv6 support once I can properly test it.
+* Most network-related scripts are dual-stack and support both IPv4 and IPv6 where applicable.
 
 ## Prerequisites
 
@@ -35,8 +38,8 @@ git clone https://github.com/kuchkovsky/asuswrt-merlin-scripts.git
 
 ## Uploading the updated scripts to your router
 Before applying these steps, make sure you've reviewed the scripts described in the next sections
-and adjusted their configuration to fit your own environment. Once configured, follow these commands
-to safely upload and activate them on your router:
+and adjusted their configuration to fit your own environment, removing the scripts you don't need.
+Once configured, follow these commands to safely upload and activate them on your router:
 ```sh
 # On your machine
 cd asuswrt-merlin-scripts
@@ -62,33 +65,40 @@ reboot
 
 ## Table of Contents
 
-1. [Inbound WAN Firewall (ipset-based blocking & DoS-protection)](#1-inbound-wan-firewall-ipset-based-blocking--dos-protection)
+1. [Inbound WAN Firewall (ipset-based blocking & DoS Protection)](#1-inbound-wan-firewall-ipset-based-blocking--dos-protection)
 2. [Tunnel Director (ipset-based policy routing)](#2-tunnel-director-ipset-based-policy-routing)
 3. [WireGuard Client Port Forwarder](#3-wireguard-client-port-forwarder)
 4. [Dual WAN email notifications & optional LAN host blocking](#4-dual-wan-email-notifications--optional-lan-host-blocking)
 5. [Automatic USB SSD trimming](#5-automatic-usb-ssd-trimming)
-6. [nextdns-cli integration for SDNs & automatic updates](#6-nextdns-cli-integration-for-sdns--automatic-updates)
-7. [Traffic Monitor table patch (Kb/s & Mb/s)](#7-traffic-monitor-table-patch-kbs--mbs)
-8. [Router startup notification](#8-router-startup-notification)
-9. [Shared utilities](#9-shared-utilities)
+6. [IPv6 SLAAC and RA support for SDN networks](#6-ipv6-slaac-and-ra-support-for-sdn-networks)
+7. [nextdns-cli integration for SDNs & automatic updates](#7-nextdns-cli-integration-for-sdns--automatic-updates)
+8. [Static IPv6 routes to LAN hosts](#8-static-ipv6-routes-to-lan-hosts)
+9. [Traffic Monitor table patch (Kb/s & Mb/s)](#9-traffic-monitor-table-patch-kbs--mbs)
+10. [Router startup notification](#10-router-startup-notification)
+11. [Shared utilities](#11-shared-utilities)
 
 
-## 1. Inbound WAN Firewall (ipset-based blocking & DoS-protection)
+## 1. Inbound WAN Firewall (ipset-based blocking & DoS Protection)
 
 > **Prerequisites:**
-> 1. Designed for use only when port forwarding is enabled - it has no effect otherwise.
+> 1. Designed for use only when IPv4 port forwarding is enabled or IPv6 services
+>    are allowed in the firewall for external access - it has no effect otherwise.
 > 2. The WAN interface must receive a **public IP directly** (no double NAT).
-> 3. Country blocking with [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)
+> 3. For IPv6-based blocking to function, your ISP must support IPv6,
+>    and it must be enabled in the router's settings.
+> 4. Country blocking with [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)
 >    requires a `MAXMIND_LICENSE_KEY` and external USB storage; otherwise,
 >    [IPdeny](https://www.ipdeny.com/ipblocks/) will be used.
-> 4. The CIDR aggregation feature requires external USB storage for the
+> 5. The CIDR aggregation feature requires external USB storage for the
 >    [mapCIDR](https://github.com/projectdiscovery/mapcidr) binary;
 >    otherwise, IP ranges won't be aggregated.
 
 * [**`wan_firewall.sh`**](jffs/scripts/firewall/wan_firewall.sh) - **high-performance inbound firewall for Asuswrt-Merlin**
-  that applies only the TCP/UDP ports you actually forward in the GUI. It provides **country blocking,
-  malicious IP filtering, spoofed traffic protection, and optional per-IP/per-port DoS rate limiting**
-  before packets hit DNAT, conntrack, or routing - protecting your public services with minimal overhead.
+  that applies only to the TCP/UDP ports you forward or allow for external access in the GUI
+  and **supports both IPv4 and IPv6**. It provides **country blocking, malicious IP filtering,
+  spoofed traffic protection, and optional per-IP/per-port DoS rate limiting** -
+  all applied before packets hit DNAT, conntrack, or routing, protecting your public services
+  with minimal overhead.
   
   **By default, it uses [FireHOL Level 1](https://iplists.firehol.org/?ipset=firehol_level1) as a baseline**
   against spoofed traffic and common attack sources for minimal false positives. **Includes predefined but commented-out
@@ -104,20 +114,27 @@ reboot
 
   #### Main features
   * **Bogon traffic drop**  
-    - Discards spoofed traffic from reserved/unroutable IPv4 ranges (RFC 6890, 1918, 3927, 6598, etc.) before conntrack,
+    - Discards spoofed traffic from reserved/unroutable IPv4 and IPv6 ranges before conntrack,
       saving CPU and avoiding table pollution.
   * **Country blocking with high-accuracy [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)**  
     - Uses [MaxMind's](https://www.maxmind.com/en/home) free [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)
       database (weekly updates, multi-source verification) for some of the most accurate country-to-IP mappings available.  
     - Falls back to [IPdeny](https://www.ipdeny.com/ipblocks/) feeds if you don't set a `MAXMIND_LICENSE_KEY`.  
     - Blocks entire countries from reaching your forwarded ports - useful for cutting off high-risk regions entirely.
+    - Fully supports IPv6 ranges, as well as the IPv4 ones.
   * **Custom ipsets for malicious source blocking**  
     - Pulls in threat intelligence feeds you choose **directly from URLs** - e.g. AbuseIPDB, IPsum, DShield, Greensnow.
       Can also use **custom hardcoded IP lists** defined directly in the configuration file.
     - Supports downloads from **any source**, including the **API key protected ones** by allowing you to specify
       custom `curl` arguments like headers, so you can integrate paid or authenticated feeds without modifying the script. 
-    - Ships with [**FireHOL Level 1**](https://iplists.firehol.org/?ipset=firehol_level1) enabled as a baseline:
+    - For IPv4, ships with [**FireHOL Level 1**](https://iplists.firehol.org/?ipset=firehol_level1) enabled as a baseline:
       curated bogon, abuse, and attack-source list designed for minimal false positives.  
+    - For IPv6, it uses two reputable, continuously maintained sources -
+      [**Team Cymru fullbogons**](https://www.team-cymru.com/bogon-reference-http),
+      which lists all unallocated or reserved IPv6 ranges to block invalid traffic, and
+      [**Spamhaus DROPv6**](https://www.spamhaus.org/blocklists/do-not-route-or-peer/), which targets well-known
+      abusive networks such as spam, malware, and botnet hosts - together providing a clean, safe IPv6 baseline
+      with minimal risk of overblocking.  
     - Includes [predefined](jffs/scripts/firewall/config.sh) (commented out by default) high-impact feeds for stronger protection:
       * [**FireHOL Level 2**](https://iplists.firehol.org/?ipset=firehol_level2) - broader threat coverage,
         focusing on active attacks from the last ~48 hours (blocklist_de, dshield_1d, greensnow).  
@@ -150,11 +167,15 @@ reboot
     
       # You can define a passlist for highly-trusted sources
       pss:
-        4.5.6.7        # your VPS IP
-        11.12.13.14    # your friend's home IP
+        4.5.6.7        # your VPS IPv4
+        11.12.13.14    # your friend's home IPv4
+      
+      pss6:
+        2a12:abcd::10  # your VPS IPv6
+        2a12:abcd::30  # your friend's home IPv6
       ```
   * **Flexible ipset-based WAN Firewall rules**  
-    - Defines filtering behavior using a clear rule format:  
+    - Defines IPv4/IPv6 filtering behavior using a clear rule format:  
       **`mode:ports:protos:set[,set...]:set_excl[,set_excl...][:minutes][:ip_count]`**  
       where:  
       - `mode` → `pass`, `allow`, `block`, or `log`  
@@ -169,15 +190,16 @@ reboot
       - **`block`** → drop traffic from the listed sets unless explicitly excluded.  
       - **`log`** → record matching traffic for analysis without dropping it. Adjustable logging frequency via `minutes`
         (time window) and `ip_count` (max logs per IP). Packets are logged to syslog with
-        the `ips_` prefix (`ips_80,443_t_blk`, `ips_22_t_blk_exc1`).  
+        the `ips_` (or `ips6_` for IPv6) prefix (`ips_80,443_t_blk`, `ips6_22_t_blk_exc1`).  
     - Features:  
       - **Excludes** let you carve out trusted or special-case sets within a broader rule.
       - **Rule order matters**: place broad/global rules (e.g., passlists, global blocks) before more specific matches.  
     - Example rules:  
       ```
       pass:any:any:pss                     # unconditionally allow matches from pss
-      block:any:any:blk,cn,kp              # drop traffic from blocklist, CN or KP
+      block:any:any:blk,cn,kp              # drop IPv4 traffic from blocklist, CN or KP
       block:any:any:blk,cn,kp:exc1,exc2    # same as above, but exempt exc1/2
+      block:any:any:blk6,cn6,kp6           # drop IPv6 traffic from blocklist, CN or KP
       allow:80,443:any:rly,us              # allow rly/US, drop others on 80/443
       allow:1000-2000:tcp:ca               # allow CA on TCP 1000-2000
       log:123:udp:any                      # log all NTP with 5 min window, 1 IP
@@ -200,7 +222,8 @@ reboot
       - `minutes` → optional tracking window (default: 5 minutes)  
       - `log_count` → optional, `per_ip` only; max logs per offending IP per window (default: 1)  
     - Logging:  
-      - Offending packets are logged to syslog with the `dos_` prefix (`dos_ip_443_t`, `dos_port_123_u`).  
+      - Offending packets are logged to syslog with the `dos_` (or `dos6_` for IPv6) prefix
+        (`dos_ip_443_t`, `dos6_port_123_u`).  
       - Logging is automatically rate-limited to prevent log floods.  
     - Best practice:  
       - Place **`per_ip`** rules before any overlapping **`per_port`** rules so attackers are throttled
@@ -214,7 +237,8 @@ reboot
       per_port:123:udp:3333         # per_port, burst defaults to 3 (log_count ignored)
       ```
   * **Dynamic targeting & early filtering**  
-    - Auto-detects forwarded ports from the GUI and filters only those.  
+    - Auto-detects forwarded or publicly allowed ports from the GUI and filters only those -
+      both IPv4 and IPv6.
     - All filtering happens in the `raw` table for earliest possible drop.
   * **Smart rule tracking & idempotence**  
     - Computes hashes of current vs. desired rule sets.  
@@ -227,15 +251,16 @@ reboot
   * **Minimizes false positives** - rules apply *only* to your WAN-exposed services.
 
   #### Integration
-  * Runs on `nat-start` to auto-refresh rules after GUI changes.
-  * If `ipset_builder.sh` killswitch is active, WAN firewall rules are inserted after it
-    so no traffic leaks before sets are ready.
+  * Runs on `firewall-start` to auto-refresh rules after GUI changes.
+  * If `ipset_builder.sh` killswitch is active, both IPv4 and IPv6 WAN rules are inserted afterward,
+    ensuring no unfiltered traffic leaks before ipsets are restored.
 
 * [**`ipset_builder.sh`**](jffs/scripts/firewall/ipset_builder.sh) - **ipset builder module** used by `wan_firewall.sh`.
 
   #### Capabilities
-  * Builds per-country ipsets from [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)
-    (preferred) or [IPdeny](https://www.ipdeny.com/ipblocks/).
+  * Builds per-country IPv4 and IPv6 ipsets from [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)
+    (preferred) or [IPdeny](https://www.ipdeny.com/ipblocks/),
+    depending on availability and router configuration.
   * Fetches and maintains custom ipsets from inline CIDRs or remote lists (HTTP/HTTPS).
   * Bundles [FireHOL Level 1](https://iplists.firehol.org/?ipset=firehol_level1) for safe baseline protection;
     can optionally add Level 2/3, AbuseIPDB, IPsum, and other feeds for stronger security.
@@ -249,6 +274,7 @@ reboot
       successful build of all ipsets.
     - Prevents your forwarded ports from being exposed to unfiltered traffic while ipsets
       are still downloading and building.
+    - When IPv6 is enabled, the killswitch also applies to IPv6 firewall chains.
     - `ports` can be a single number (e.g. 80), a comma-separated list (e.g. 80,443,123),
       or a dash-style range (e.g. 1000-2000)
     - `protos` can be `tcp`, `udp`, or `any` (matches both).
@@ -270,11 +296,11 @@ reboot
   the firewall-related scripts.
 
 * [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook invoked on boot completion.
-  It triggers the initial ipset build and schedules periodic refresh via cron (daily for country sets
-  and twice daily for custom feeds), then starts WAN Firewall.
+  It triggers the initial ipset build and schedules periodic refresh via cron
+  (daily for country sets and twice daily for custom feeds), then starts WAN Firewall.
 
-* [**`nat-start`**](jffs/scripts/nat-start) - Asuswrt-Merlin hook that reapplies firewall rules
-  after every NAT reload.
+* [**`firewall-start`**](jffs/scripts/firewall-start) - Asuswrt-Merlin hook that reapplies
+  firewall rules after every firewall reload.
 
 * [**`profile.add`**](jffs/configs/profile.add) - Asuswrt-Merlin custom shell profile config. 
   Defines a helper alias so you can edit `config.sh` and reapply firewall changes instantly
@@ -488,7 +514,7 @@ reboot
   
 ## 5. Automatic USB SSD trimming
 
-**Why?** ASUS routers don't enable SSD trimming by default, and most USB SSDs ship with
+ASUS routers don't enable SSD trimming by default, and most USB SSDs ship with
 provisioning mode **`full`** or **`partial`**. In those modes, Linux silently ignores `fstrim`,
 so the drive never learns which blocks are free. Switching the attribute to **`unmap`**
 enables proper TRIM/UNMAP and keeps write speeds consistent.
@@ -561,29 +587,156 @@ Edit [`services-start`](jffs/scripts/services-start) and update the cron job def
 cru a trim_ssd "0 4 * * 0 /jffs/scripts/ssd/ssd_trim.sh st5"   # use the exact label you assigned with tune2fs
 ```
 
-## 6. nextdns-cli integration for SDNs & automatic updates
+## 6. IPv6 SLAAC and RA support for SDN networks
+
+> **Prerequisites:**
+> 1. [SDN](https://www.asus.com/support/faq/1053195/) is supported only on
+>    [VLAN-capable router models](https://www.asus.com/support/faq/1049415/) running Asuswrt-Merlin
+>    3006.\* or later.
+> 2. Your ISP must delegate a **/48**, **/56**, or **/60** IPv6 prefix to your router.  
+>    If the WAN PD is **/64**, there are no free /64 subnets available for SDN bridges.
+> 3. **Enable IPv6 globally** in the router's Web UI:  
+>    *Advanced Settings → IPv6*  
+>    You can select any IPv6 mode except Passthrough.
+> 4. **Disable IPv6** for each SDN in the GUI.  
+>    The scripts automatically handle IPv6 addressing and Router Advertisements (RA).
+
+ASUS firmware currently lacks proper support for **stateless IPv6 autoconfiguration (SLAAC)** on
+**[SDN (Self-Defined Network)](https://www.asus.com/support/faq/1053195/)** bridges. The built-in `dnsmasq` service
+only enables **stateful DHCPv6** for SDNs, not stateless autoconfiguration. As a result, when IPv6 is enabled
+for SDN interfaces in the GUI, the firmware reconfigures all internal subnets - including the main LAN - from
+`/64` to `/72`. This breaks SLAAC entirely, since most client devices require a `/64` prefix to self-generate
+global IPv6 addresses. Consequently, IPv6 connectivity fails completely for clients that don't support DHCPv6.
+
+When your ISP provides a **delegated prefix (PD)** (for example, `/56`), the main LAN correctly receives
+a `/64` only **as long as SDN IPv6 remains disabled**. Once enabled, however, the firmware slices the entire PD
+into smaller `/72` segments, effectively breaking SLAAC on all networks - including the main LAN.
+
+The scripts below work together to **restore full IPv6 functionality** on all SDN bridges.  
+They automatically allocate proper `/64` subnets from the delegated prefix, enable Router Advertisements (RA)
+for **SLAAC**, and configure a secure firewall policy that allows outbound traffic while maintaining
+isolation between SDNs and the router.
+
+**Note:** the scripts configure IPv6 on all SDN bridges by default. If you want to exclude specific bridges,
+upload all required files listed below, then run the **`sls`** command on the router (a helper alias)
+to list SDN names and their bridges:
+> ```
+> kuchkovsky@rt:/tmp/home/root# sls
+> name=Guest br=br54 sdn_idx=3
+> name=IoT   br=br56 sdn_idx=5
+> ```
+Next, edit [`config.sh`](jffs/scripts/sdn/config.sh) and set `EXCLUDED_IFACES` to skip the selected bridges.
+
+* [**`sdn_v6_br.sh`**](jffs/scripts/sdn/sdn_v6_br.sh) - assigns stable, per-bridge `/64` prefixes.
+  * Reads the **WAN delegated prefix (PD)** and computes unique `/64` subnets for each SDN bridge.  
+  * Assigns each bridge its own router address (e.g. `<prefix>::1/64`).
+  * Keeps subnet numbering stable between reboots or config changes.  
+  * Supports PD sizes `/48`, `/56`, and `/60` (skips `/64` since there's nothing to carve).  
+  * **Example:**  
+    ```
+    WAN PD = 2001:db8:abcd:1000::/56  
+    br0  (idx=0) → 2001:db8:abcd:1000::/64  
+    br54 (idx=1) → 2001:db8:abcd:1001::/64  
+    br56 (idx=2) → 2001:db8:abcd:1002::/64
+    ```
+
+* [**`sdn_v6_dnsmasq.sh`**](jffs/scripts/sdn/sdn_v6_dnsmasq.sh) - enables Router Advertisements and SLAAC.  
+  * Automatically appends the required `dnsmasq` directives for each SDN instance.  
+  * Ensures that clients receive IPv6 configuration via **SLAAC**, not stateful DHCPv6.  
+  * Advertises DNS (RDNSS) via RA, so clients can resolve hostnames automatically.  
+  * Runs automatically through the `dnsmasq-sdn.postconf` hook - no manual execution required.
+
+* [**`sdn_v6_firewall.sh`**](jffs/scripts/sdn/sdn_v6_firewall.sh) - enables and secures IPv6 connectivity
+  for SDN bridges.  
+  * Establishes full IPv6 forwarding support, allowing SDN clients to reach the internet via the router.  
+  * Permits essential local services - DNS (UDP/53) and DHCPv6 (UDP/547) - for address configuration.  
+  * Blocks direct access to the router's global IPv6 addresses and isolates SDN bridges from each other.  
+  * Prevents unsolicited inbound ICMPv6 (ping) traffic from the Internet to internal networks.
+
+* [**`sdn_v6_shared.sh`**](jffs/scripts/sdn/sdn_v6_shared.sh) - internal helper library shared
+  by all SDN IPv6 scripts.
+
+* [**`config.sh`**](jffs/scripts/sdn/config.sh) - shared configuration.  
+  * Lists excluded bridges (if you want some SDNs to stay IPv4-only).  
+  * The main LAN (`br0`) is always excluded automatically.  
+  * All scripts respect this configuration file.
+
+* [**`dhcpc-event`**](jffs/scripts/dhcpc-event) - Asuswrt-Merlin system hook invoked on DHCP events.
+  Triggers `sdn_v6_br.sh` whenever the WAN interface receives a new IPv6 prefix delegation (PD).
+
+* [**`dnsmasq-sdn.postconf`**](jffs/scripts/dnsmasq-sdn.postconf) - Asuswrt-Merlin hook executed after
+  SDN `dnsmasq` configuration is generated. Calls `sdn_v6_dnsmasq.sh` to enable Router Advertisements (RA)
+  and SLAAC on SDN instances.
+
+* [**`firewall-start`**](jffs/scripts/firewall-start) - Asuswrt-Merlin hook triggered after each firewall reload.
+  Runs `sdn_v6_firewall.sh` to reapply IPv6 forwarding and isolation rules for all SDN bridges.
+
+* [**`profile.add`**](jffs/configs/profile.add) – Asuswrt-Merlin custom shell profile config.
+  Defines a helper alias `sls` that lists all SDN networks and their corresponding bridges,
+  allowing you to quickly identify the bridge name you may want to exclude in your configuration.
+
+## 7. nextdns-cli integration for SDNs & automatic updates
 > **Prerequisites:**  
-> 1. [SDN](https://www.asus.com/support/faq/1053195/) integration is supported only on
+> 1. [SDN](https://www.asus.com/support/faq/1053195/) is supported only on
 >    [VLAN-capable router models](https://www.asus.com/support/faq/1049415/) running Asuswrt-Merlin
 >    3006.\* or later. Routers without SDN ignore the `dnsmasq-sdn.postconf` file.  
 > 2. Install and configure
 >    [**`nextdns-cli`**](https://github.com/nextdns/nextdns/wiki/AsusWRT-Merlin)
 >    before adding these scripts.
 
-* **`dnsmasq-sdn.postconf`** - **enables `nextdns-cli` for every
-  [SDN (Self-Defined Network)](https://www.asus.com/support/faq/1053195/)**, not just the main LAN.
-  To enable NextDNS for SDN, simply run **on the router** once:  
-  ```sh
-  ln -s /jffs/scripts/dnsmasq.postconf /jffs/scripts/dnsmasq-sdn.postconf
-  ```
-  > **Note:** `dnsmasq.postconf` is created automatically by `nextdns-cli`. We just symlink it under
-  > `dnsmasq-sdn.postconf` so SDNs use it too.
+* **`dnsmasq-sdn.postconf`** - extends `nextdns-cli` integration to all
+  [**SDN (Self-Defined Network)**](https://www.asus.com/support/faq/1053195/) instances, not just the main LAN.  
+  The script directly invokes `dnsmasq.postconf`, which is generated automatically by `nextdns-cli`,
+  ensuring that SDN networks also benefit from NextDNS filtering and DoH configuration.
 
 * [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook invoked on boot completion
   that adds a weekly cron entry to update the `nextdns-cli` binary.
 
+## 8. Static IPv6 routes to LAN hosts
 
-## 7. Traffic Monitor table patch (Kb/s & Mb/s)
+> **Prerequisites:**
+> 1. Your ISP must delegate a **/48**, **/56**, or **/60** IPv6 prefix to your router.  
+>    A /64 prefix is insufficient for routing additional subnets to LAN hosts.
+> 2. **Enable IPv6 globally** in the router's Web UI:  
+>    *Advanced Settings → IPv6*  
+>    You can select any IPv6 mode except Passthrough.
+
+ASUS firmware currently provides no GUI support for **IPv6 static routes**, making it impossible
+to route additional IPv6 subnets (e.g., dedicated `/64`s) to specific LAN hosts or downstream routers.  
+This script fills that gap by allowing you to define and automatically maintain **static IPv6 routes**
+using link-local next-hops - the correct and reliable method for on-link IPv6 routing.
+
+It is particularly useful for setups where a device such as a **Docker host**, **hypervisor**, or
+**secondary router** manages its own downstream subnet. You can carve one or more subnets from your
+delegated prefix (PD) and route them to that device, allowing it to manage those addresses natively.
+
+* [**`v6_static_routes.sh`**](jffs/scripts/misc/v6_static_routes.sh) – defines and maintains static IPv6
+  routes to LAN hosts.
+  * Reads rule definitions from the `STATIC_ROUTE_RULES` variable, where each line follows  
+    the format `iface|link_local|static_route`.  
+    Example:
+    ```
+    br0|fe80::1234:56ff:fe78:9abc|2a10:abcd:1234:aa10::/64
+    ```
+  * Validates each rule:
+    - Ensures the interface exists.  
+    - Verifies that the next-hop address is link-local (`fe80::/10`).
+  * Applies routes idempotently:
+    - Skips routes that already exist with the same parameters.  
+    - Replaces or removes conflicting entries automatically.
+  * Supports **any valid IPv6 prefix size** (`/48`–`/128`), though `/64` is typical for host subnets.  
+  * Uses link-local next-hops to avoid dependence on global SLAAC or DHCPv6 addresses.  
+  * Logs all actions, warnings, and errors for full transparency.
+
+* [**`dhcpc-event`**](jffs/scripts/dhcpc-event) – Asuswrt-Merlin system hook invoked on DHCP events.
+  Triggers `v6_static_routes.sh` whenever the WAN interface receives a new IPv6 prefix delegation (PD).  
+
+> **Tip:**  
+> Avoid using the first few subnets from your delegated prefix if you also use
+> [`sdn_v6_br.sh`](jffs/scripts/sdn/sdn_v6_br.sh) for SDN networks, since that script assigns
+> lower-indexed subnets automatically and may cause overlap.
+
+## 9. Traffic Monitor table patch (Kb/s & Mb/s)
 
 * [**`tmcal.js.add`**](jffs/tmcal.js.add) - overrides a function in ASUS `tmcal.js`
   so the **Traffic Monitor table shows throughput in kilobits/megabits per second (Kb/s & Mb/s)**
@@ -603,7 +756,7 @@ from showing KB/s & MB/s to Kb/s & Mb/s:
 ![Traffic-Monitor table now shows Mb/s](docs/img/tm_table_patched.png)
 
 
-## 8. Router startup notification
+## 10. Router startup notification
 
 * [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook invoked on boot completion
   that triggers **startup notification email 60 seconds after the router comes online**.
@@ -611,7 +764,7 @@ from showing KB/s & MB/s to Kb/s & Mb/s:
   the router yourself, it likely means power was lost and then restored.
 
 
-## 9. Shared utilities
+## 11. Shared utilities
 
 Helper scripts shared by other modules.
 
@@ -626,42 +779,42 @@ Helper scripts shared by other modules.
 
  * [**`common.sh`**](jffs/scripts/utils/common.sh) **library**
 
-   | Function                        | What it does                                                                                                                                                                                            | Typical use-case                                                                              |
-   |---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-   | `uuid4`                         | Generates a kernel-provided random UUIDv4 string from `/proc/sys/kernel/random/uuid`.                                                                                                                   | Create unique temp names, job IDs, or correlation IDs in logs.                                |
-   | `compute_hash [<file>\|-]`      | SHA-256 helper: hashes a file (when path is given) or stdin (no arg/`-`); prints the 64-char lowercase digest only.                                                                                     | Change detection (e.g., ruleset/config hashing) and cache keys; works cleanly in pipelines.   |
-   | `get_script_path`               | Returns the absolute path to the running script, resolving symlinks (falls back to `$0` if needed).                                                                                                     | Locate the script itself (e.g., `. "$(get_script_path)"`).                                    |
-   | `get_script_dir`                | Returns the directory containing the current script (absolute, no trailing slash).                                                                                                                      | Locate sibling files (e.g., `. "$(get_script_dir)/config.sh"`).                               |
-   | `get_script_name [-n]`          | Returns the script's filename; `-n` strips the extension.                                                                                                                                               | Derive a log tag, lock name, or temp file prefix.                                             |
-   | `log [-l <level>] <message...>` | Lightweight syslog wrapper (facility `user`). Logs to both syslog and stderr; supports priorities: `debug\|info\|notice\|warn\|err\|crit\|alert\|emerg`. Adds readable prefixes for non-default levels. | Uniform logging across scripts; easy grepping in `/tmp/syslog.log`.                           |
-   | `acquire_lock [<name>]`         | Takes a non-blocking lock under `/var/lock/<name>.lock` (defaults to script name). Exits early if another instance is running; holds lock until process exit.                                           | Prevent concurrent runs of cron- or hook-driven scripts.                                      |
-   | `tmp_file`                      | Creates a UUID-named temp file in `/tmp`, tracks it for auto-cleanup on exit via trap. Prints the path.                                                                                                 | Scratch files that should be deleted automatically.                                           |
-   | `tmp_dir`                       | Creates a UUID-named temp directory in `/tmp`, tracked for auto-cleanup on exit via trap. Prints the path.                                                                                              | Staging directories for downloads, extracts, or generated assets.                             |
-   | `is_lan_ip <ipv4>`              | Returns `0` if the IPv4 is private (RFC-1918: `10/8`, `172.16/12`, `192.168/16`), `1` otherwise.                                                                                                        | Quick guard before applying LAN-only logic or validations.                                    |
-   | `resolve_ip <host-or-ip>`       | Resolves a literal IP, `/etc/hosts` alias, or DNS name to a single IPv4 (LAN or WAN). Prints the IP; non-zero on failure.                                                                               | Turn a hostname into an address when public/private doesn't matter.                           |
-   | `resolve_lan_ip <host-or-ip>`   | Like `resolve_ip`, but requires the result be RFC-1918; errors out otherwise.                                                                                                                           | Safely resolve devices that must be on your LAN (e.g., firewall rules targeting local hosts). |
-   | `get_active_wan_if`             | Returns the interface name of the currently active WAN (checks `wanN_primary` flags; falls back to `wan0_ifname`).                                                                                      | Pick the correct egress interface for WAN-specific rules or diagnostics.                      |
-   | `strip_comments [<text>]`       | Trims lines, drops blanks and `#` comments (including inline), normalizes input. Reads from the argument if provided, otherwise stdin; prints cleaned lines.                                            | Preprocess rule blocks (e.g., `CUSTOM_IPSETS`, `IPSET_RULES`, `DOS_RULES`) before parsing.    |
-   | `is_pos_int <value>`            | Returns success (`0`) if `<value>` is a positive integer (>= 1); returns `1` otherwise.                                                                                                                 | Validate numeric config such as `minutes`, `above`, `burst`, `log_count`.                     |
+   | Function                                    | What it does                                                                                                                                                                                            | Typical use-case                                                                                |
+   |---------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+   | `uuid4`                                     | Generates a kernel-provided random UUIDv4 string from `/proc/sys/kernel/random/uuid`.                                                                                                                   | Create unique temp names, job IDs, or correlation IDs in logs.                                  |
+   | `compute_hash [<file>\|-]`                  | SHA-256 helper: hashes a file (when path is given) or stdin (no arg/`-`); prints the 64-char lowercase digest only.                                                                                     | Change detection (e.g., ruleset/config hashing) and cache keys; works cleanly in pipelines.     |
+   | `get_script_path`                           | Returns the absolute path to the running script, resolving symlinks (falls back to `$0` if needed).                                                                                                     | Locate the script itself (e.g., `. "$(get_script_path)"`).                                      |
+   | `get_script_dir`                            | Returns the directory containing the current script (absolute, no trailing slash).                                                                                                                      | Locate sibling files (e.g., `. "$(get_script_dir)/config.sh"`).                                 |
+   | `get_script_name [-n]`                      | Returns the script's filename; `-n` strips the extension.                                                                                                                                               | Derive a log tag, lock name, or temp file prefix.                                               |
+   | `log [-l <level>] <msg...>`                 | Lightweight syslog wrapper (facility `user`). Logs to both syslog and stderr; supports priorities: `debug\|info\|notice\|warn\|err\|crit\|alert\|emerg`. Adds readable prefixes for non-default levels. | Uniform logging across scripts; easy grepping in `/tmp/syslog.log`.                             |
+   | `acquire_lock [<name>]`                     | Takes a non-blocking lock under `/var/lock/<name>.lock` (defaults to script name). Exits early if another instance is running; holds the lock until process exit.                                       | Prevent concurrent runs of cron- or hook-driven scripts.                                        |
+   | `tmp_file`                                  | Creates a UUID-named temp file in `/tmp`, tracked for auto-cleanup on exit via trap. Prints the path.                                                                                                   | Scratch files that should be deleted automatically.                                             |
+   | `tmp_dir`                                   | Creates a UUID-named temp directory in `/tmp`, tracked for auto-cleanup on exit via trap. Prints the path.                                                                                              | Staging directories for downloads, extracts, or generated assets.                               |
+   | `is_lan_ip [-6] <ip>`                       | Returns `0` if the address is private (IPv4 RFC1918 or IPv6 ULA/link-local), `1` otherwise.                                                                                                             | Quick guard before applying LAN-only logic or validations.                                      |
+   | `resolve_ip [-6] [-q] [-g] [-a] <host\|ip>` | Resolves a host or literal IP to one or more addresses. Supports IPv4/IPv6 selection, global/public filtering, quiet mode, and returning all matches.                                                   | Generic resolver for hostnames; used when family/publicity doesn't matter.                      |
+   | `resolve_lan_ip [-6] [-q] [-a] <host\|ip>`  | Like `resolve_ip`, but requires results to be private/LAN (IPv4 RFC1918, IPv6 ULA/link-local).                                                                                                          | Safely resolve LAN-only devices (e.g., internal firewall targets).                              |
+   | `get_ipv6_enabled`                          | Prints `1` if IPv6 is enabled in NVRAM (`ipv6_service` != `disabled`), else `0`.                                                                                                                        | Conditional logic for dual-stack scripts (skip IPv6 logic when disabled).                       |
+   | `get_active_wan_if`                         | Returns the interface name of the currently active WAN (`wanN_primary` flag; falls back to `wan0_ifname`).                                                                                              | Pick the correct egress interface for WAN-specific rules or diagnostics.                        |
+   | `strip_comments [<text>]`                   | Trims lines, drops blanks and `#` comments (including inline), normalizes input. Reads from argument if provided, otherwise stdin; prints cleaned lines.                                                | Preprocess multi-line configs (e.g., `CUSTOM_IPSETS`, `IPSET_RULES`, `DOS_RULES`) before parse. |
+   | `is_pos_int <value>`                        | Returns success (`0`) if `<value>` is a positive integer (≥ 1); returns `1` otherwise.                                                                                                                  | Validate numeric config such as `minutes`, `above`, `burst`, `log_count`.                       |
 
  * [**`firewall.sh`**](jffs/scripts/utils/firewall.sh) **library**
 
-   | Function                                                                                | What it does                                                                                                                                                                                                                                                                   | Typical use-case                                                                                                                                                    |
-   |-----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-   | `validate_port <N>`                                                                     | Validates a single TCP/UDP port: must be an integer between `1` and `65535`. Returns `0` if valid, `1` otherwise.                                                                                                                                                              | Sanity-check user-provided port numbers before passing them into `iptables` or higher-level parsing.                                                                |
-   | `validate_ports <spec>`                                                                 | Validates a destination port spec: `"any"`, single port (`N`), comma list (`N,N2`), dash range (`N-M`), or mixed list (e.g., `80,443,1000-2000`). Returns `0` if valid, `1` otherwise.                                                                                         | Sanity-check rule port fields before building iptables args.                                                                                                        |
-   | `normalize_protos <spec>`                                                               | Normalizes a protocol spec to one of: `tcp`, `udp`, or `tcp,udp`. Accepts `any`, `tcp`, `udp`, `tcp,udp`, or `udp,tcp`; prints the canonical form and returns `0` (non-zero on invalid input).                                                                                 | Convert user config to canonical proto strings used when generating iptables rules (`-p` / multiport).                                                              |
-   | `fw_chain_exists <table> <chain>`                                                       | Returns `0` if the chain exists in the table, else `1`.                                                                                                                                                                                                                        | Quick guard checks before creating, deleting, or syncing rules.                                                                                                     |
-   | `create_fw_chain [-q] [-f] <table> <chain>`                                             | Ensures a user-defined chain exists; with `-f` flushes it if already present. `-q` suppresses info logs.                                                                                                                                                                       | Initialize or reset per-script chains (e.g., `RAW_FILTERING`, `WGC1_RULES`).                                                                                        |
-   | `delete_fw_chain [-q] <table> <chain>`                                                  | Flushes and deletes a user-defined chain if it exists (no-op if missing). `-q` suppresses info logs.                                                                                                                                                                           | Clean teardown during script disable/uninstall or rebuilds.                                                                                                         |
-   | `find_fw_rules "<table> <chain>" "<grep -E pattern>"`                                   | Prints matching `iptables -S` lines for the given table/chain and regex; prints nothing if chain missing.                                                                                                                                                                      | Inspect current state, drive higher-level sync/purge operations.                                                                                                    |
-   | `purge_fw_rules [-q] [--count] "<table> <chain>" "<grep -E pattern>"`                   | Deletes all rules in the specified table/chain that match the regex. With `--count`, prints number of deletions. `-q` suppresses info logs.                                                                                                                                    | Remove stale/duplicate jump blocks or old rule variants in bulk.                                                                                                    |
-   | `ensure_fw_rule [-q] [--count] <table> <chain> [-I [pos] \| -D] <rule...>`              | Idempotent rule manager: appends (`-A`) if missing, inserts at position (`-I [pos]`, default 1) if missing, or deletes (`-D`) if present. Skips duplicates and avoids invalid deletes. With `--count`, prints `1` on change, else `0`. `-q` suppresses info logs.              | Reliable single-rule management without manual `-C/-A/-I/-D` dance; used throughout all firewall scripts.                                                           |
-   | `sync_fw_rule [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]` | Reconciles a rule set to exactly one desired rule: if one matching rule already equals the desired spec → no change; otherwise purge all matches and add the desired rule (append or insert at `insert_pos`). With `--count`, prints total changes. `-q` suppresses info logs. | Keep `PREROUTING` jump blocks or chain heads in a single authoritative form (e.g., TCP/UDP multiport jumps).                                                        |
-   | `block_wan_for_host <hostname\|ip> [wan_id]`                                            | Resolves the host to a LAN IP, finds the WAN egress interface, and inserts `DROP`/`REJECT` rules in `filter FORWARD` to block both *to* and *from* that WAN (defaults to secondary WAN `wan_id=1`).                                                                            | Keep a chatty device off an expensive LTE backup link; enforce parental controls by cutting a child's device off the internet via scripts/automations.              |
-   | `allow_wan_for_host <hostname\|ip> [wan_id]`                                            | Resolves the host to a LAN IP, locates the WAN egress interface, and removes the corresponding `DROP`/`REJECT` rules to restore WAN access (defaults to `wan_id=1`).                                                                                                           | Restore internet access when primary WAN is back; lift temporary parental blocks.                                                                                   |
-   | `chg <command ...>`                                                                     | Helper that returns success (`0`) if the wrapped command's stdout is a non-zero integer; otherwise returns failure. Useful with functions that support `--count`.                                                                                                              | Gate "did anything change?" flows: `if chg purge_fw_rules --count ...; then do_something; fi` or aggregate change detection across multiple ensure/sync operations. |
-
+   | Function                                                                                     | What it does                                                                                                                                                                     | Typical use-case                                                                               |
+   |----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+   | `validate_port <N>`                                                                          | Validates a single TCP/UDP port: must be an integer between `1` and `65535`. Returns `0` if valid, `1` otherwise.                                                                | Sanity-check user-provided port numbers before using them in `iptables` or parsing routines.   |
+   | `validate_ports <spec>`                                                                      | Validates a port specification: accepts `"any"`, single ports (`N`), comma lists (`N,N2`), dash ranges (`N-M`), or mixed forms (e.g., `80,443,1000-2000`). Returns `0` if valid. | Validate destination port fields in rule definitions before constructing CLI args.             |
+   | `normalize_protos <spec>`                                                                    | Normalizes protocol spec to `tcp`, `udp`, or `tcp,udp`. Accepts `any`, `tcp`, `udp`, `tcp,udp`, `udp,tcp`; prints canonical form, returns `0` if valid.                          | Convert user configs into canonical proto lists used by multiport rules.                       |
+   | `fw_chain_exists [-6] <table> <chain>`                                                       | Returns `0` if `<chain>` exists in `<table>` (`iptables` or `ip6tables`), else `1`.                                                                                              | Guard before creating or deleting user-defined chains.                                         |
+   | `create_fw_chain [-6] [-q] [-f] <table> <chain>`                                             | Ensures a chain exists; with `-f`, flushes it if present. `-6` selects `ip6tables`; `-q` suppresses info logs.                                                                   | Initialize or reset per-script chains (e.g., `WAN_FILTERING`, `WGC1_RULES`).                   |
+   | `delete_fw_chain [-6] [-q] <table> <chain>`                                                  | Flushes and deletes a user-defined chain if present. No-op if absent.                                                                                                            | Clean teardown or script disable/uninstall routines.                                           |
+   | `find_fw_rules [-6] "<table> <chain>" "<pattern>"`                                           | Lists all rules in `<table>/<chain>` matching a regex. Prints nothing if none.                                                                                                   | Inspect active rules to drive higher-level sync/purge logic.                                   |
+   | `purge_fw_rules [-6] [-q] [--count] "<table> <chain>" "<pattern>"`                           | Deletes all rules matching `<pattern>` in `<table>/<chain>`. With `--count`, prints number of deletions.                                                                         | Bulk cleanup of outdated jumps or stale variants before reinsertion.                           |
+   | `ensure_fw_rule [-6] [-q] [--count] <table> <chain> [-I [pos] \| -D] <rule...>`              | Idempotent rule manager: append, insert, or delete rules safely. Skips duplicates; `--count` prints `1` if a change occurred.                                                    | Core helper for consistent single-rule management throughout all firewall scripts.             |
+   | `sync_fw_rule [-6] [-q] [--count] <table> <chain> "<pattern>" "<desired args>" [insert_pos]` | Reconciles a rule set to exactly one desired rule: if matches differ, purges all and inserts one canonical rule. Supports IPv6 and positional inserts.                           | Maintain a single authoritative jump (e.g., `PREROUTING` jump to `WAN_FIREWALL`).              |
+   | `block_wan_for_host <hostname\|ip> [wan_id]`                                                 | Resolves the host to its LAN IPv4 and (if IPv6 enabled) all global IPv6 addresses. Inserts DROP/REJECT rules in `filter/FORWARD` for both directions. Defaults to `wan_id=0`.    | Temporarily isolate a LAN device from a specific WAN (e.g., LTE backup, parental control).     |
+   | `allow_wan_for_host <hostname\|ip> [wan_id]`                                                 | Resolves LAN IPv4 and global IPv6, removes the corresponding DROP/REJECT rules to restore connectivity. Defaults to `wan_id=0`.                                                  | Restore WAN access previously blocked by `block_wan_for_host`.                                 |
+   | `chg <command ...>`                                                                          | Runs a command and returns success (`0`) if its stdout is a non-zero integer - useful with `--count` helpers.                                                                    | Gate logic like `if chg purge_fw_rules ...; then do_something; fi` for clean change detection. |
 
 ## License
 

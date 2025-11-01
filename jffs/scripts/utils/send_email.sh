@@ -38,6 +38,9 @@ AMTM_EMAIL_DIR="/jffs/addons/amtm/mail"
 AMTM_EMAIL_CONF="$AMTM_EMAIL_DIR/email.conf"
 AMTM_EMAIL_PW_ENC="$AMTM_EMAIL_DIR/emailpw.enc"
 
+# Wait time (seconds) before retrying email after network failure
+RETRY_DELAY=60
+
 ###############################################################################
 # 0c. Ensure email is configured
 ###############################################################################
@@ -101,17 +104,25 @@ FROM_NAME="ASUS $(nvram get model)"   # router name shown in "From:"
 ###############################################################################
 # 2. Send over SMTP using curl
 ###############################################################################
-if /usr/sbin/curl -sS --url "${PROTOCOL}://${SMTP}:${PORT}" \
-    --mail-from "$FROM_ADDRESS" \
-    --mail-rcpt "$TO_ADDRESS" \
-    --upload-file "$TMP_MAIL" \
-    --ssl-reqd \
-    --crlf \
-    --user "$USERNAME:$PASSWORD" \
-    $SSL_FLAG
-then
-    log "Email sent to $TO_ADDRESS: $SUBJECT"
-else
-    log -l err "Failed to send email to $TO_ADDRESS: $SUBJECT"
-    exit 3
-fi
+for try in 1 2 3; do
+    if /usr/sbin/curl -sS --url "${PROTOCOL}://${SMTP}:${PORT}" \
+            --mail-from "$FROM_ADDRESS" \
+            --mail-rcpt "$TO_ADDRESS" \
+            --upload-file "$TMP_MAIL" \
+            --ssl-reqd \
+            --crlf \
+            --user "$USERNAME:$PASSWORD" \
+            $SSL_FLAG;
+    then
+        log "Email sent to $TO_ADDRESS: $SUBJECT"
+        break
+    fi
+
+    if [ "$try" -lt 3 ]; then
+        log -l warn "Email send failed, retrying in ${RETRY_DELAY}s... (attempt $try/3)"
+        sleep "$RETRY_DELAY"
+    else
+        log -l err "Failed to send email to $TO_ADDRESS: $SUBJECT after 3 attempts"
+        exit 3
+    fi
+done
