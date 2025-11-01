@@ -114,7 +114,7 @@ main_rtr_v6="$(nvram get ipv6_rtr_addr)"
 for br in $(list_bridges); do
     # Skip excluded bridges
     if is_excluded "$br"; then
-        log "$br is excluded (listed in EXCLUDED_IFACES or main LAN); skipping"
+        log -l debug "$br is excluded (listed in EXCLUDED_IFACES or main LAN); skipping"
         continue
     fi
 
@@ -151,7 +151,7 @@ done
 # 2. Finalize
 ###################################################################################################
 if [ "$br_count" -gt 0 ]; then
-    log "Successfully configured $br_count SDN bridges"
+    log -l debug "Successfully configured $br_count SDN bridges"
 else
     log -l warn "No eligible bridges found (check EXCLUDED_IFACES)"
 fi
