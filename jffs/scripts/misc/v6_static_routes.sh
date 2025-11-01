@@ -46,7 +46,13 @@ set -euo pipefail
 ###################################################################################################
 # 0a. Exit early on unrelated DHCP events
 ###################################################################################################
-{ [ "$1" = "bound" ] && [ "$2" = "6" ]; } || exit 0
+case "$1:$2" in
+    bound:6|updated:6)
+        ;;
+    *)
+        exit 0
+        ;;
+esac
 
 ###################################################################################################
 # 0b. Load utils
@@ -205,8 +211,12 @@ while IFS='|' read -r iface link_local static_route; do
     if [ "$matched" -eq 1 ] && { [ -z "$matched_metric" ] || \
         [ "$matched_metric" -eq "$ROUTE_METRIC" ]; };
     then
-        log "IPv6 route already present: $static_route via $link_local" \
+        log -l debug "IPv6 route already present: $static_route via $link_local" \
             "dev $iface metric ${matched_metric:-none}"
+
+        # Increment the configured route counter
+        route_count=$((route_count+1))
+
         continue
     fi
 
@@ -232,7 +242,7 @@ done < "$static_route_rules"
 # 2. Finalize
 ###################################################################################################
 if [ "$route_count" -gt 0 ]; then
-    log "Successfully configured $route_count static routes"
+    log -l debug "Successfully configured $route_count static routes"
 fi
 
 if [ "$errors" -gt 0 ]; then

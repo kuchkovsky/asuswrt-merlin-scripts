@@ -54,7 +54,13 @@ set -euo pipefail
 ###################################################################################################
 # 0a. Exit early on unrelated DHCP events
 ###################################################################################################
-{ [ "$1" = "bound" ] && [ "$2" = "6" ]; } || exit 0
+case "$1:$2" in
+    bound:6|updated:6)
+        ;;
+    *)
+        exit 0
+        ;;
+esac
 
 ###################################################################################################
 # 0b. Load utils and shared variables
@@ -138,12 +144,11 @@ calc_h4_for_offset() {
 }
 
 has_expected_addr() {
-    local br="$1" expect="$2"
-    ip -6 addr show dev "$br" scope global |
-    awk -v want="${expect}/64" '
-        $1 == "inet6" && $2 == want { exit 0 }
-        END { exit 1 }
-    '
+    local br="$1" addr="$2"
+    ip -o -6 addr show dev "$br" scope global 2>/dev/null |
+        grep -Eq "[[:space:]]inet6[[:space:]]+$(
+            printf '%s' "$addr" | sed 's/:/\\:/g'
+        )([[:space:]]|$)"
 }
 
 purge_non64_globals() {
@@ -231,7 +236,8 @@ while read -r br idx; do
     # br0 & any excluded bridges are NOT configured,
     # but their index still affects everyone after
     if is_excluded "$br"; then
-        log "$br is excluded (main LAN or EXCLUDED_IFACES); keeping it out of scope"
+        log -l debug "$br is excluded (main LAN or EXCLUDED_IFACES);" \
+            "keeping it out of scope"
         continue
     fi
 
@@ -239,17 +245,21 @@ while read -r br idx; do
     is_br_ipv6_disabled "$br" || continue
 
     prefix="${H1}:${H2}:${H3}:${nh4}"
-    want="${prefix}::1"
+    want="${prefix}::1/64"
 
     if has_expected_addr "$br" "$want"; then
-        log "Skipping $br - already configured with ${want}/64"
+        log -l debug "Skipping $br - already configured with $want (idx=$idx)"
+
+        # Increment the configured bridge counter
+        br_count=$((br_count+1))
+
         continue
     fi
 
     # Remove wrong-length globals (e.g. /72 leftovers), then install the desired /64
     purge_non64_globals "$br"
 
-    if ip -6 addr replace "${want}/64" dev "$br" 2>/dev/null; then
+    if ip -6 addr replace "$want" dev "$br" 2>/dev/null; then
         log "Configured $br -> ${prefix}::/64 (idx=$idx)"
 
         # Increment the configured bridge counter
@@ -270,7 +280,7 @@ EOF
 ###################################################################################################
 if [ "$errors" -eq 0 ]; then
     if [ "$br_count" -gt 0 ]; then
-        log "Successfully configured $br_count SDN bridges"
+        log -l debug "Successfully configured $br_count SDN bridges"
     else
         log -l warn "No eligible bridges found (check EXCLUDED_IFACES)"
     fi

@@ -75,7 +75,7 @@ if [ -z "$BR" ]; then
 fi
 
 if is_excluded "$BR"; then
-    log "$BR is excluded (listed in EXCLUDED_IFACES); exiting..."
+    log -l debug "$BR is excluded (listed in EXCLUDED_IFACES); exiting..."
     exit 0
 fi
 
