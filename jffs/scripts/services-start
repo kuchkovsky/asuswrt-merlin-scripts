@@ -21,9 +21,6 @@
 # Flow: IPSet Builder -> WAN Firewall -> Tunnel Director
 (/jffs/scripts/firewall/ipset_builder.sh -k -w -t) &
 
-# ------------------- Patch Traffic Monitor JS to show Kb/s / Mb/s in the table -------------------
-/jffs/scripts/misc/mount_tmcal.sh   # merges /www/tmcal.js with /jffs/tmcal.js.add
-
 # ------------------------------------------- Cron jobs -------------------------------------------
 # update_all_ipsets      - run every day 03:00, updates all ipset DBs
 # update_cust_ipsets     - run every day 15:00, updates custom ipset DBs
