@@ -73,9 +73,8 @@ reboot
 6. [IPv6 SLAAC and RA support for SDN networks](#6-ipv6-slaac-and-ra-support-for-sdn-networks)
 7. [nextdns-cli integration for SDNs & automatic updates](#7-nextdns-cli-integration-for-sdns--automatic-updates)
 8. [Static IPv6 routes to LAN hosts](#8-static-ipv6-routes-to-lan-hosts)
-9. [Traffic Monitor table patch (Kb/s & Mb/s)](#9-traffic-monitor-table-patch-kbs--mbs)
-10. [Router startup notification](#10-router-startup-notification)
-11. [Shared utilities](#11-shared-utilities)
+9. [Router startup notification](#9-router-startup-notification)
+10. [Shared utilities](#10-shared-utilities)
 
 ## 1. Automatic USB SSD TRIM
 
@@ -496,6 +495,7 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
   by simply typing `ipt`, without rebooting.
 
 ## 4. WireGuard Client Port Forwarder
+
 > **Prerequisites:**
 > 1. Your **AllowedIPs** in the WireGuard config should include the tunnel subnet (e.g. `10.0.0.0/24`)
 >    and any optional public subnets, **but not** your LAN range (`192.168.0.0/16`).
@@ -509,7 +509,7 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
   only to the WAN interface. **This script adds equivalent port forwarding for the WireGuard client tunnel** (`wgcX`).
 
   * Creates two NAT chains:
-    * **`<WGC_IF>_VSERVER`** - hooked from `PREROUTING` for traffic to the router's  **`WG_CLIENT_IP`**.
+    * **`<WGC_IF>_VSERVER`** - hooked from `PREROUTING` for traffic to the router's **`WG_CLIENT_IP`**.
     * **`<WGC_IF>_VSERVER_RULES`** - holds interface-agnostic DNAT rules.
   * Inserts per-interface jumps (WireGuard + LAN) from `_VSERVER` into `_VSERVER_RULES` to reduce duplicate rules
     and keep lookups cheap. The LAN jump makes forwarded ports reachable locally on the WG client IP (e.g. `10.0.0.2`)
@@ -646,6 +646,7 @@ Next, edit [`config.sh`](jffs/scripts/sdn/config.sh) and set `EXCLUDED_IFACES` t
   allowing you to quickly identify the bridge name you may want to exclude in your configuration.
 
 ## 7. nextdns-cli integration for SDNs & automatic updates
+
 > **Prerequisites:**  
 > 1. [SDN](https://www.asus.com/support/faq/1053195/) is supported only on
 >    [VLAN-capable router models](https://www.asus.com/support/faq/1049415/) running Asuswrt-Merlin
@@ -706,35 +707,14 @@ delegated prefix (PD) and route them to that device, allowing it to manage those
 > [`sdn_v6_br.sh`](jffs/scripts/sdn/sdn_v6_br.sh) for SDN networks, since that script assigns
 > lower-indexed subnets automatically and may cause overlap.
 
-## 9. Traffic Monitor table patch (Kb/s & Mb/s)
-
-* [**`tmcal.js.add`**](jffs/tmcal.js.add) - overrides a function in ASUS `tmcal.js`
-  so the **Traffic Monitor table shows throughput in kilobits/megabits per second (Kb/s & Mb/s)**
-  instead of bytes per second. It simply multiplies the raw byte values by **8**, aligning with
-  units used by tools like Speedtest, making the numbers easier to compare with real-world bandwidth tests.
-
-* [**`mount_tmcal.sh`**](jffs/scripts/misc/mount_tmcal.sh) - concatenates the stock JS file
-  with the patch and bind-mounts the result over `/www/tmcal.js`.
-
-* [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook invoked on boot completion
-  that triggers `mount_tmcal.sh`.
-
-
-Once the `tmcal.js` overlay is mounted, the **Traffic Analyzer → Traffic Monitor** table switches
-from showing KB/s & MB/s to Kb/s & Mb/s:
-
-![Traffic-Monitor table now shows Mb/s](docs/img/tm_table_patched.png)
-
-
-## 10. Router startup notification
+## 9. Router startup notification
 
 * [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook invoked on boot completion
   that triggers **startup notification email 60 seconds after the router comes online**.
   Serves as an indirect power outage alert: if you receive the message without having rebooted
   the router yourself, it likely means power was lost and then restored.
 
-
-## 11. Shared utilities
+## 10. Shared utilities
 
 Helper scripts shared by other modules.
 
