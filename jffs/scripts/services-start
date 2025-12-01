@@ -27,11 +27,11 @@
 # ------------------------------------------- Cron jobs -------------------------------------------
 # update_all_ipsets      - run every day 03:00, updates all ipset DBs
 # update_cust_ipsets     - run every day 15:00, updates custom ipset DBs
-# trim_ssd               - run every Sunday 04:00, sends fstrim to the USB SSD
+# trim_ssd               - run every Sunday 04:00, sends fstrim to USB SSDs
 # upgrade_nextdns        - run every Sunday 05:00, upgrades NextDNS binary
 cru a update_all_ipsets  "0 3 * * * /jffs/scripts/firewall/ipset_builder.sh -u"
 cru a update_cust_ipsets "0 15 * * * /jffs/scripts/firewall/ipset_builder.sh -uc"
-cru a trim_ssd           "0 4 * * 0 /jffs/scripts/ssd/ssd_trim.sh st5"
+cru a trim_ssd           "0 4 * * 0 /jffs/scripts/ssd/ssd_trim.sh"
 cru a upgrade_nextdns    "0 5 * * 0 /jffs/nextdns/nextdns upgrade"
 
 # -------------------------------------- Startup notification -------------------------------------

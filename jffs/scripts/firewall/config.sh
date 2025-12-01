@@ -613,7 +613,7 @@ HTABLE_MAX=131072
 #                            VPN Director rules or ASUS SDN policies, ensuring
 #                            they don't override system-level routing decisions.
 #   * TUN_DIR_MARK_MASK    - bitmask of the nfmark field owned by Tunnel Director.
-#                            Default: 0x00ff0000 (bits 16–23).
+#                            Default: 0x00ff0000 (bits 16-23).
 #                            This reserves an 8-bit "slot field" inside the 32-bit mark.
 #                            Slot 0 = "unmarked by TD"; slots 1..255 = rule IDs.
 #                            We always write marks with --set-xmark <value>/<mask>, so only
@@ -634,14 +634,14 @@ HTABLE_MAX=131072
 #         (QoS, vendor flags, DPI, etc.). Since later jumps see a non-zero slot,
 #         they are skipped -> first match wins.
 #   * Why these defaults:
-#       - Bits 16–23 are rarely used by firmware features on Asuswrt-Merlin,
+#       - Bits 16-23 are rarely used by firmware features on Asuswrt-Merlin,
 #         while bit 0 is often used by system rules.
-#         Reserving bits 16–23 provides a safe, isolated 8-bit field
+#         Reserving bits 16-23 provides a safe, isolated 8-bit field
 #         that supports up to 255 Tunnel Director rules without collisions.
 #   * When to change MARK_MASK/SHIFT (advanced):
 #       - If >255 rules are required, choose a wider contiguous field
 #         (e.g., 0x0fff0000 with SHIFT=16).
-#       - If another component already uses bits 16–23, move TD's field
+#       - If another component already uses bits 16-23, move TD's field
 #         elsewhere (e.g., 0x0000ff00 with SHIFT=8).
 #       - REQUIREMENTS:
 #           * MASK must be contiguous (e.g., 0x0000ff00, not disjoint).
