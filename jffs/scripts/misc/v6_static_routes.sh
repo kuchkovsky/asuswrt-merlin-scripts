@@ -29,7 +29,7 @@
 #     interface. Find it on the host with:  ip -6 addr show dev <iface>
 #   * Using link-local next-hops is the standard approach for on-link static routes.
 #     It avoids dependency on global address churn caused by SLAAC or DHCPv6 renewals.
-#   * Supports any valid IPv6 prefix size (/48–/128). Typical routed subnets are /64,
+#   * Supports any valid IPv6 prefix size (/48-/128). Typical routed subnets are /64,
 #     but smaller or larger prefixes work as well.
 ###################################################################################################
 

@@ -40,7 +40,7 @@
 #   * GeoLite2 country ipsets require MAXMIND_LICENSE_KEY and mounted external storage;
 #     sign up for a free account and set the license key if you want to use this database.
 #     If the key is unset or storage is unmounted, the script falls back to IPdeny.
-#   * By default, Tunnel Director reserves 8 bits of the fwmark (bits 16–23), which allows
+#   * By default, Tunnel Director reserves 8 bits of the fwmark (bits 16-23), which allows
 #     for up to 255 distinct rules. If you need more, you can adjust TUN_DIR_MARK_MASK and
 #     TUN_DIR_MARK_SHIFT in config.sh (see section 10 for details).
 #   * IPv4-only for now, as Merlin's VPN implementation does not treat IPv6 as

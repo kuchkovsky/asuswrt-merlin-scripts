@@ -65,11 +65,11 @@ reboot
 
 ## Table of Contents
 
-1. [Inbound WAN Firewall (ipset-based blocking & DoS Protection)](#1-inbound-wan-firewall-ipset-based-blocking--dos-protection)
-2. [Tunnel Director (ipset-based policy routing)](#2-tunnel-director-ipset-based-policy-routing)
-3. [WireGuard Client Port Forwarder](#3-wireguard-client-port-forwarder)
-4. [Dual WAN email notifications & optional LAN host blocking](#4-dual-wan-email-notifications--optional-lan-host-blocking)
-5. [Automatic USB SSD trimming](#5-automatic-usb-ssd-trimming)
+1. [Automatic USB SSD TRIM](#1-automatic-usb-ssd-trim)
+2. [Inbound WAN Firewall (ipset-based blocking & DoS Protection)](#2-inbound-wan-firewall-ipset-based-blocking--dos-protection)
+3. [Tunnel Director (ipset-based policy routing)](#3-tunnel-director-ipset-based-policy-routing)
+4. [WireGuard Client Port Forwarder](#4-wireguard-client-port-forwarder)
+5. [Dual WAN email notifications & optional LAN host blocking](#5-dual-wan-email-notifications--optional-lan-host-blocking)
 6. [IPv6 SLAAC and RA support for SDN networks](#6-ipv6-slaac-and-ra-support-for-sdn-networks)
 7. [nextdns-cli integration for SDNs & automatic updates](#7-nextdns-cli-integration-for-sdns--automatic-updates)
 8. [Static IPv6 routes to LAN hosts](#8-static-ipv6-routes-to-lan-hosts)
@@ -77,8 +77,53 @@ reboot
 10. [Router startup notification](#10-router-startup-notification)
 11. [Shared utilities](#11-shared-utilities)
 
+## 1. Automatic USB SSD TRIM
 
-## 1. Inbound WAN Firewall (ipset-based blocking & DoS Protection)
+> **Prerequisites:**
+> 1. The USB storage must be formatted with an **ext2, ext3, or ext4** filesystem.  
+>    Other filesystems are not supported for TRIM by this script.
+> 2. TRIM must be **supported and correctly exposed** by both the SSD and its USB bridge/enclosure.  
+>    This script will try to work around common limitations (e.g., broken UNMAP, buggy discard handling),
+>    but success is not guaranteed. If you run into issues, feel free to contact me via **SNBForums**
+>    or open a **GitHub issue** for further investigation.
+
+By default, ASUS firmware does not provide a built-in and reliable way to issue TRIM for USB-attached SSDs.  
+Even though Linux and ext-based filesystems support TRIM, the stock behavior often means that:
+- `fstrim` is never run automatically,
+- many USB-SATA/NVMe bridges expose SSDs with `provisioning_mode=full` or `partial`, which blocks UNMAP,
+- some adapters fail on larger discard operations with kernel errors such as `"Remote I/O error"`.
+
+In practice, this can result in USB SSDs never being trimmed, leading over time to reduced write
+performance, increased write amplification, and unnecessary wear.  
+The script in this section provides **automated, safe TRIM handling** for USB SSDs on Asuswrt-Merlin.
+
+* **[`ssd_trim.sh`](jffs/scripts/ssd/ssd_trim.sh)** - automated TRIM handler for USB SSDs.  
+  This script turns TRIM into a regular maintenance task handled entirely on the router side. It:
+  - scans all USB-backed mountpoints under `/tmp/mnt` (or a single label if specified),
+  - skips excluded labels, rotational drives, and unsupported filesystems,
+  - enforces `provisioning_mode="unmap"` on eligible devices so the kernel can send TRIM/UNMAP commands,
+  - runs `fstrim` and detects whether any space was actually reclaimed,
+  - handles problematic USB adapters by:
+    - retrying with `write_same_max_bytes` as a safe upper bound,
+    - caching per-disk working `discard_max_bytes` values in **nvram**,
+    - permanently disabling TRIM only for devices that cannot be made to work reliably.
+
+  All per-disk decisions are stored under stable nvram keys derived from the device's USB identity,
+  so behavior remains consistent across reboots without manual tuning.
+
+* **[`config.sh`](jffs/scripts/ssd/config.sh)** - configuration for `ssd_trim.sh`.  
+  This file centralizes user-facing settings:
+  - defines filesystem labels to exclude from automatic TRIM via `EXCLUDED_SSD_LABELS`,
+  - allows adjustments without editing the main script,
+  - is sourced by `ssd_trim.sh` on every run, so changes take effect immediately.
+
+  To completely skip a given disk, assign it a label and add that label to `EXCLUDED_SSD_LABELS`.
+
+* [**`services-start`**](jffs/scripts/services-start) - scheduled trimming via cron.  
+  The `services-start` hook installs a periodic cron job (weekly by default) that runs `ssd_trim.sh`,
+  ensuring that connected USB SSDs are trimmed regularly without manual intervention.
+
+## 2. Inbound WAN Firewall (ipset-based blocking & DoS Protection)
 
 > **Prerequisites:**
 > 1. Designed for use only when IPv4 port forwarding is enabled or IPv6 services
@@ -338,7 +383,7 @@ reboot
   reply traffic from outbound connections might reuse the same numbers as your forwarded services,
   keeping matching in `raw PREROUTING` unambiguous.
 
-## 2. Tunnel Director (ipset-based policy routing)
+## 3. Tunnel Director (ipset-based policy routing)
 
 > **Prerequisites:**
 > 1. At least one **VPN client (WireGuard or OpenVPN)** must be configured and active in Asuswrt-Merlin.  
@@ -450,7 +495,7 @@ reboot
   Defines a helper alias so you can edit `config.sh` and reapply tunnel changes instantly
   by simply typing `ipt`, without rebooting.
 
-## 3. WireGuard Client Port Forwarder
+## 4. WireGuard Client Port Forwarder
 > **Prerequisites:**
 > 1. Your **AllowedIPs** in the WireGuard config should include the tunnel subnet (e.g. `10.0.0.0/24`)
 >    and any optional public subnets, **but not** your LAN range (`192.168.0.0/16`).
@@ -491,7 +536,7 @@ reboot
   by simply typing `wpf`, without rebooting.
 
 
-## 4. Dual WAN email notifications & optional LAN host blocking
+## 5. Dual WAN email notifications & optional LAN host blocking
 
 > **Prerequisites / Notes:**
 > 1. **Dual WAN** must be enabled in the UI and configured in **failover** mode with automatic **failback**.
@@ -511,81 +556,6 @@ reboot
 
 * [**`firewall-start`**](jffs/scripts/firewall-start) - Asuswrt-Merlin hook that reapplies the LAN-hosts
   block if the firewall is restarted while the secondary WAN is active.
-  
-## 5. Automatic USB SSD trimming
-
-ASUS routers don't enable SSD trimming by default, and most USB SSDs ship with
-provisioning mode **`full`** or **`partial`**. In those modes, Linux silently ignores `fstrim`,
-so the drive never learns which blocks are free. Switching the attribute to **`unmap`**
-enables proper TRIM/UNMAP and keeps write speeds consistent.
-**These scripts enable full TRIM support for USB SSDs on ASUS routers**.
-
-* [**`ssd_unmap.sh`**](jffs/scripts/ssd/ssd_unmap.sh) - scans `/sys/devices/` for USB devices whose
-  `idVendor` matches `SSD_VENDOR_ID` (default: `04e8` for Samsung) and writes
-  `unmap` into each `provisioning_mode` file it finds (if needed).
-
-* [**`ssd_trim.sh`**](jffs/scripts/ssd/ssd_trim.sh) - runs `fstrim -v /tmp/mnt/<LABEL>` and logs the result.
-
-* [**`pre-mount`**](jffs/scripts/pre-mount) - Asuswrt-Merlin hook that automatically applies
-  the provisioning mode fix when a drive with the specified label is connected.
-
-* [**`services-start`**](jffs/scripts/services-start) - Asuswrt-Merlin hook that sets up
-  a weekly cron job to run `ssd_trim.sh`.
-
-### Required steps - run on the router once
-  **1) Identify your vendor ID and partition path**
-
-  ```sh
-  for d in /sys/block/sd*/sd*; do
-    [ -f "$d/partition" ] || continue            # keep partitions only
-    part=/dev/${d##*/}                           # /dev/sdXN
-    p=$(readlink -f "${d%/*}/device")            # climb to USB device node
-    while [ "$p" != "/" ] && [ ! -f "$p/idVendor" ]; do p=${p%/*}; done
-    [ -f "$p/idVendor" ] && printf '%s -> %s (%s)\n'         "$(cat "$p/idVendor")" "$part"         "$(cat "$p/manufacturer" 2>/dev/null)"
-  done | sort -u
-  ```
-
-  Sample output:
-
-  ```
-  04e8 -> /dev/sda1 (Samsung)
-  0781 -> /dev/sdb1 (SanDisk)
-  ```
-
-  Take the hex ID (`04e8`) and note the correct partition.
-
-  **2) Supply your vendor ID (only if it isn't Samsung)** 
-  
-  Edit [`pre-mount`](jffs/scripts/pre-mount) and add your own `idVendor`
-as the first argument.  Leave the line untouched if you use a Samsung SSD
-(`idVendor = 04e8`).
-
-  ```sh
-/jffs/scripts/ssd_unmap.sh 0781   # 0781 = SanDisk (example)
-  ```
-  **3) Label the filesystem**
-
-Pick any label you like (e.g. `st5`, `ssd`).
-
-  ```sh
-tune2fs -L st5 /dev/sda1   # specify your label and the device partition
-  ```
-
-**4) Keep the label in sync with the `pre-mount` hook**
-
-Edit [`pre-mount`](jffs/scripts/pre-mount) and set:
-
-```sh
-SSD_VOLUME_LABEL='st5'   # use the exact label you assigned with tune2fs
-```
-
-**5) Keep the label in sync with the `services-start` hook**
-
-Edit [`services-start`](jffs/scripts/services-start) and update the cron job definition argument:
-
-```sh
-cru a trim_ssd "0 4 * * 0 /jffs/scripts/ssd/ssd_trim.sh st5"   # use the exact label you assigned with tune2fs
-```
 
 ## 6. IPv6 SLAAC and RA support for SDN networks
 
@@ -671,7 +641,7 @@ Next, edit [`config.sh`](jffs/scripts/sdn/config.sh) and set `EXCLUDED_IFACES` t
 * [**`firewall-start`**](jffs/scripts/firewall-start) - Asuswrt-Merlin hook triggered after each firewall reload.
   Runs `sdn_v6_firewall.sh` to reapply IPv6 forwarding and isolation rules for all SDN bridges.
 
-* [**`profile.add`**](jffs/configs/profile.add) – Asuswrt-Merlin custom shell profile config.
+* [**`profile.add`**](jffs/configs/profile.add) - Asuswrt-Merlin custom shell profile config.
   Defines a helper alias `sls` that lists all SDN networks and their corresponding bridges,
   allowing you to quickly identify the bridge name you may want to exclude in your configuration.
 
@@ -710,7 +680,7 @@ It is particularly useful for setups where a device such as a **Docker host**, *
 **secondary router** manages its own downstream subnet. You can carve one or more subnets from your
 delegated prefix (PD) and route them to that device, allowing it to manage those addresses natively.
 
-* [**`v6_static_routes.sh`**](jffs/scripts/misc/v6_static_routes.sh) – defines and maintains static IPv6
+* [**`v6_static_routes.sh`**](jffs/scripts/misc/v6_static_routes.sh) - defines and maintains static IPv6
   routes to LAN hosts.
   * Reads rule definitions from the `STATIC_ROUTE_RULES` variable, where each line follows  
     the format `iface|link_local|static_route`.  
@@ -724,11 +694,11 @@ delegated prefix (PD) and route them to that device, allowing it to manage those
   * Applies routes idempotently:
     - Skips routes that already exist with the same parameters.  
     - Replaces or removes conflicting entries automatically.
-  * Supports **any valid IPv6 prefix size** (`/48`–`/128`), though `/64` is typical for host subnets.  
+  * Supports **any valid IPv6 prefix size** (`/48`-`/128`), though `/64` is typical for host subnets.  
   * Uses link-local next-hops to avoid dependence on global SLAAC or DHCPv6 addresses.  
   * Logs all actions, warnings, and errors for full transparency.
 
-* [**`dhcpc-event`**](jffs/scripts/dhcpc-event) – Asuswrt-Merlin system hook invoked on DHCP events.
+* [**`dhcpc-event`**](jffs/scripts/dhcpc-event) - Asuswrt-Merlin system hook invoked on DHCP events.
   Triggers `v6_static_routes.sh` whenever the WAN interface receives a new IPv6 prefix delegation (PD).  
 
 > **Tip:**  
