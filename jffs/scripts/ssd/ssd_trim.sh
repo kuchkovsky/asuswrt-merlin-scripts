@@ -25,7 +25,6 @@
 #     1) Detects all USB-backed mounts under /tmp/mnt (or a specific label when provided).
 #     2) Validates each device is eligible:
 #           - not excluded via EXCLUDED_SSD_LABELS,
-#           - non-rotational (SSD / flash storage),
 #           - formatted as ext2/ext3/ext4,
 #           - not explicitly disabled via nvram.
 #     3) Fixes USB bridge behavior by forcing provisioning_mode="unmap" so the kernel
@@ -164,30 +163,6 @@ get_disk_id_key() {
     key=$(printf '%s' "$raw" | tr -c 'A-Za-z0-9_' '_' | cut -c1-40)
 
     printf '%s\n' "$key"
-}
-
-# -------------------------------------------------------------------------------------------------
-# disk_passes_rotational_check - rotational-only disk check
-# -------------------------------------------------------------------------------------------------
-# Checks only:
-#   * rotational flag (must be 0)
-#
-# Returns 0 if disk passes this check, 1 otherwise.
-# -------------------------------------------------------------------------------------------------
-disk_passes_rotational_check() {
-    local disk="$1"
-    local context="$2"  # e.g. "label=st5 mount=/tmp/mnt/st5 part=/dev/sdb1 vendor_id=04e8 ..."
-    local rot_val
-
-    if [ -f "/sys/block/$disk/queue/rotational" ]; then
-        rot_val=$(cat "/sys/block/$disk/queue/rotational" 2>/dev/null || printf '1')
-        if [ "$rot_val" -ne 0 ]; then
-            log "Skipping drive=/dev/${disk} (marked non-SSD) for ${context}"
-            return 1
-        fi
-    fi
-
-    return 0
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -458,17 +433,12 @@ while read -r dev m fstype rest; do
             context="label=${label} mount=${m} part=${dev} fs=${fstype} vendor_id=${vid}"
             [ -n "$manufacturer" ] && context="${context} vendor_name=${manufacturer}"
 
-            # 2) Rotational check (skip HDDs / "rotational" devices)
-            if ! disk_passes_rotational_check "$disk_name" "$context"; then
-                continue
-            fi
-
-            # 3) Filesystem support check (TRIM only on ext2/ext3/ext4)
+            # 2) Filesystem support check (TRIM only on ext2/ext3/ext4)
             if ! filesystem_supports_trim "$dev" "$fstype" "$context"; then
                 continue
             fi
 
-            # 4) Derive per-disk nvram key & value (after cheap filters)
+            # 3) Derive per-disk nvram key & value (after cheap filters)
             disk_id=$(get_disk_id_key "$disk_name")
             nv_key="${SSD_NV_PREFIX}${disk_id}_discard_max_bytes"
             nv_val=$(nvram get "$nv_key" 2>/dev/null || printf '')
@@ -489,7 +459,7 @@ while read -r dev m fstype rest; do
 
             log "Detected SSD candidate: ${context}"
 
-            # 5) Ensure UNMAP; if this fails, mark disk as unsupported & skip
+            # 4) Ensure UNMAP; if this fails, mark disk as unsupported & skip
             if ! ensure_unmap_for_disk "$disk_name"; then
                 nvram set "${nv_key}=0"
                 nvram_dirty=1
@@ -498,7 +468,7 @@ while read -r dev m fstype rest; do
                 continue
             fi
 
-            # 6) Run TRIM with nvram-backed fallback strategy
+            # 5) Run TRIM with nvram-backed fallback strategy
             if run_fstrim_with_fallback "$disk_name" "$m" "$context" "$nv_key" "$nv_val"; then
                 trimmed=1
             else

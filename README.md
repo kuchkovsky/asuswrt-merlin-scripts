@@ -99,7 +99,7 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
 * **[`ssd_trim.sh`](jffs/scripts/ssd/ssd_trim.sh)** - automated TRIM handler for USB SSDs.  
   This script turns TRIM into a regular maintenance task handled entirely on the router side. It:
   - scans all USB-backed mountpoints under `/tmp/mnt` (or a single label if specified),
-  - skips excluded labels, rotational drives, and unsupported filesystems,
+  - skips excluded labels, unsupported filesystems, and disks that were permanently disabled due to previous errors,
   - enforces `provisioning_mode="unmap"` on eligible devices so the kernel can send TRIM/UNMAP commands,
   - runs `fstrim` and detects whether any space was actually reclaimed,
   - handles problematic USB adapters by:
@@ -121,6 +121,24 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
 * [**`services-start`**](jffs/scripts/services-start) - scheduled trimming via cron.  
   The `services-start` hook installs a periodic cron job (weekly by default) that runs `ssd_trim.sh`,
   ensuring that connected USB SSDs are trimmed regularly without manual intervention.
+
+> **Note:**  
+> If the script permanently disabled a disk (for example due to repeated TRIM errors) and you
+> want to re-enable it for testing or debugging, simply remove the corresponding nvram flag:
+>
+> ```sh
+> nvram unset ssd_trim_<disk-id>_discard_max_bytes
+> nvram commit
+> ```
+>
+> You can find the exact `<disk-id>` in the script log - it appears whenever the device is
+> skipped. For example:
+>
+> ```
+> ssd_trim: Skipping drive=/dev/sdb (disabled via nvram: ssd_trim_24a9_205a_24092311730058_discard_max_bytes=0) ...
+> ```
+>
+> After unsetting the key, the drive will be treated as a fresh candidate on the next run.
 
 ## 2. Inbound WAN Firewall (ipset-based blocking & DoS Protection)
 
