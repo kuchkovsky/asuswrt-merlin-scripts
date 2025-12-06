@@ -127,7 +127,7 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
 > want to re-enable it for testing or debugging, simply remove the corresponding nvram flag:
 >
 > ```sh
-> nvram unset ssd_trim_<disk-id>_discard_max_bytes
+> nvram unset ssd_trim_<disk-id>_dmb
 > nvram commit
 > ```
 >
@@ -135,7 +135,7 @@ The script in this section provides **automated, safe TRIM handling** for USB SS
 > skipped. For example:
 >
 > ```
-> ssd_trim: Skipping drive=/dev/sdb (disabled via nvram: ssd_trim_24a9_205a_24092311730058_discard_max_bytes=0) ...
+> ssd_trim: Skipping drive=/dev/sdb (disabled via nvram: ssd_trim_24a9_205a_24092311730058_dmb=0) ...
 > ```
 >
 > After unsetting the key, the drive will be treated as a fresh candidate on the next run.
